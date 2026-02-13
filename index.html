@@ -11,7 +11,7 @@
 <body>
     <script>
         let sensorHistory = []; 
-        let maxPoints = 240;
+        let maxPoints = 30 * 288; //30 entries per API request, 288 is based on a request every 10 min
         let sensorID = "94448";
         let baseUrl = "https://data.sensor.community/airrohr/v1/sensor/" + sensorID + "/";
         let proxy = "https://corsproxy.io/?";
@@ -20,7 +20,7 @@
         let latestMax = 0, latestMin = 0, latestEq = 0;
 
         function setup() {
-            createCanvas(600, 400);
+            createCanvas(windowWidth, 400);
             
             // 1. Load History from your GitHub Repo first
             // Note: This file is created by logger.py
