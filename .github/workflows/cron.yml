@@ -1,0 +1,27 @@
+name: Log Sensor Data
+on:
+  schedule:
+    - cron: '*/5 * * * *' # This means: "At every 5th minute"
+  workflow_dispatch: # Allows you to run it manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Run Logger
+        run: |
+          pip install requests
+          python logger.py
+      - name: Commit and Push
+        run: |
+          git config --global user.name "DataBot"
+          git config --global user.email "bot@github.com"
+          git add sensor_history.json
+          git commit -m "Updated sensor logs" || exit 0
+          git push
