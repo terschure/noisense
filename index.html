@@ -124,7 +124,7 @@
             // add text labels
             fill(0); noStroke(); textAlign(LEFT); textSize(12);
             text("Range: " + latestMin + " - " + latestMax + " dB (Avg: " + latestEq + ")", 30, 25);
-            text("Sensor " + sensorID, 30, 40);
+            text("Sensor " + sensorID + "; sensorHistory.length: " + sensorHistory.length, 30, 40);
         }
 
         function drawGrid() {
