@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 20px; font-family: sans-serif; background: #fafafa; }
+        canvas { border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    <script>
+        let sensorHistory = []; 
+        let maxPoints = 240;
+        let sensorID = "94448";
+        let baseUrl = "https://data.sensor.community/airrohr/v1/sensor/" + sensorID + "/";
+        let proxy = "https://corsproxy.io/?";
+        let fetchTime = 120000; // 2 minutes
+        let yMax = 100;
+        let latestMax = 0, latestMin = 0, latestEq = 0;
+
+        function setup() {
+            createCanvas(600, 400);
+            
+            // 1. Load History from your GitHub Repo first
+            // Note: This file is created by logger.py
+            loadJSON("sensor_history.json", (savedData) => {
+                console.log("Loading history from repo...");
+                for (let entry of savedData) {
+                    // Re-structure Python JSON to match processEntry's expectations
+                    let mockEntry = {
+                        timestamp: entry.timestamp,
+                        sensordatavalues: Object.entries(entry.values).map(([k, v]) => ({value_type: k, value: v}))
+                    };
+                    processEntry(mockEntry);
+                }
+                // 2. After history is loaded, start real-time updates
+                startLivePolling();
+            }, (err) => {
+                console.warn("History file not found (yet). Starting live only.");
+                startLivePolling();
+            });
+        }
+
+        function startLivePolling() {
+            fetchNewest();
+            setInterval(fetchNewest, fetchTime);
+        }
+
+        function processEntry(entry) {
+            let mx = 0, eq = 0, mn = 0;
+            if (!entry.sensordatavalues) return;
+
+            for (let item of entry.sensordatavalues) {
+                if (item.value_type === "noise_LA_max") mx = float(item.value);
+                if (item.value_type === "noise_LAeq") eq = float(item.value);
+                if (item.value_type === "noise_LA_min") mn = float(item.value);
+            } 
+            
+            // Convert UTC to Local Time
+            let timeLabel = new Date(entry.timestamp + "Z").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            latestMax = mx; latestEq = eq; latestMin = mn;
+
+            let isNew = sensorHistory.length === 0 || entry.timestamp !== sensorHistory[sensorHistory.length - 1].fullTime;
+            
+            if (isNew) {
+                sensorHistory.push({ mx: mx, eq: eq, mn: mn, time: timeLabel, fullTime: entry.timestamp });
+            }
+            if (sensorHistory.length > maxPoints) sensorHistory.shift();
+        }
+
+        function getFreshUrl() {
+            let cacheBuster = "?cb=" + new Date().getTime();
+            return proxy + encodeURIComponent(baseUrl + cacheBuster);
+        }
+
+        function fetchNewest() {
+            loadJSON(getFreshUrl(), (response) => {
+                if (response && response.length > 0) processEntry(response[0]);
+            });
+        }
+
+        function draw() {
+            background(255);
+            drawGrid();
+
+            if (sensorHistory.length < 2) {
+                textAlign(CENTER);
+                text("Initializing...", width / 2, height / 2);
+                return;
+            }
+
+            // Draw Area Fill
+            noStroke();
+            fill(185, 185, 185, 80);
+            beginShape();
+            for (let i = 0; i < sensorHistory.length; i++) {
+                let x = map(i, 0, maxPoints - 1, 60, width - 40);
+                let y = map(sensorHistory[i].mx, 0, yMax, height - 70, 50);
+                vertex(x, y);
+            }
+            for (let i = sensorHistory.length - 1; i >= 0; i--) {
+                let x = map(i, 0, maxPoints - 1, 60, width - 40);
+                let y = map(sensorHistory[i].mn, 0, yMax, height - 70, 50);
+                vertex(x, y);
+            }
+            endShape(CLOSE);
+
+            // Draw Average Line (Eq)
+            noFill(); stroke(0); strokeWeight(1.5);
+            beginShape();
+            for (let i = 0; i < sensorHistory.length; i++) {
+                let x = map(i, 0, maxPoints - 1, 60, width - 40);
+                let y = map(sensorHistory[i].eq, 0, yMax, height - 70, 50);
+                vertex(x, y);
+                if (i % 30 === 0) {
+                   push(); fill(120); noStroke(); textAlign(CENTER); textSize(9);
+                   text(sensorHistory[i].time, x, height - 50); pop();
+                }
+            }
+            endShape();
+            
+            // add text labels
+            fill(0); noStroke(); textAlign(LEFT); textSize(12);
+            text("Range: " + latestMin + " - " + latestMax + " dB (Avg: " + latestEq + ")", 30, 25);
+            text("Sensor " + sensorID, 30, 40);
+        }
+
+        function drawGrid() {
+            stroke(245);
+            for (let i = 0; i <= yMax; i += 10) {
+                let y = map(i, 0, yMax, height - 70, 50);
+                line(60, y, width - 40, y);
+                fill(180); noStroke(); textAlign(RIGHT); textSize(10);
+                text(i, 50, y + 4);
+            }
+            stroke(220); line(60, height - 70, width - 40, height - 70);
+        }
+    </script>
+</body>
+</html>
