@@ -22,6 +22,6 @@ jobs:
         run: |
           git config --global user.name "DataBot"
           git config --global user.email "bot@github.com"
-          git add sensor_history.json
+          git add data/sensor_history.json
           git commit -m "Updated sensor logs" || exit 0
           git push
