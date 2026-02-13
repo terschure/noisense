@@ -49,7 +49,11 @@ def update_data():
         if datetime.strptime(entry['timestamp'], "%Y-%m-%d %H:%M:%S") > cutoff
     ]
 
-    # 5. Save back to file
+    # 5. SORT (Ensure perfect time sequence)
+    # This sorts everything from oldest at the top to newest at the bottom
+    pruned_history.sort(key=lambda x: x['timestamp'])
+
+    # 6. Save back to file
     with open(DATA_FILE, "w") as f:
         json.dump(pruned_history, f, indent=2)
     
