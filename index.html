@@ -114,7 +114,7 @@
                 let x = map(i, 0, maxPoints - 1, 60, width - 40);
                 let y = map(sensorHistory[i].eq, 0, yMax, height - 70, 50);
                 vertex(x, y);
-                if (i % 30 === 0) {
+                if (i % floor(maxPoints/12) === 0) {
                    push(); fill(120); noStroke(); textAlign(CENTER); textSize(9);
                    text(sensorHistory[i].time, x, height - 50); pop();
                 }
