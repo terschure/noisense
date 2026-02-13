@@ -24,8 +24,8 @@
             
             // 1. Load History from your GitHub Repo first
             // Note: This file is created by logger.py
-            loadJSON("sensor_history.json", (savedData) => {
-                console.log("Loading history from repo...");
+            loadJSON("./data/sensor_history.json", (savedData) => {
+                console.log("Loading history...");
                 for (let entry of savedData) {
                     // Re-structure Python JSON to match processEntry's expectations
                     let mockEntry = {
