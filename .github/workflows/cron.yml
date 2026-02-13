@@ -17,7 +17,7 @@ jobs:
       - name: Run Logger
         run: |
           pip install requests
-          python logger.py
+          python src/logger.py
       - name: Commit and Push
         run: |
           git config --global user.name "DataBot"
