@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 SENSOR_ID = "94448"
 URL = f"https://data.sensor.community/airrohr/v1/sensor/{SENSOR_ID}/"
-DATA_FILE = "../data/sensor_history.json"
+DATA_FILE = os.path.join(base_dir, "..", "data", "sensor_history.json")
 
 def update_data():
     # 1. Get new data from API
