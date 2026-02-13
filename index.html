@@ -16,12 +16,12 @@
         let baseUrl = "https://data.sensor.community/airrohr/v1/sensor/" + sensorID + "/";
         let proxy = "https://corsproxy.io/?";
         let fetchTime = 120000; // 2 minutes
-        let yMax = 100;
+        let yMax;
         let latestMax = 0, latestMin = 0, latestEq = 0;
 
         function setup() {
             createCanvas(windowWidth, 400);
-            
+            yMax = windowWidth - 70;
             // 1. Load History from your GitHub Repo first
             // Note: This file is created by logger.py
             loadJSON("./data/sensor_history.json", (savedData) => {
