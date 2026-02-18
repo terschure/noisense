@@ -2,16 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoiseSense: Today vs Yesterday</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <style>
-        body { margin: 0; padding: 20px; font-family: sans-serif; background: #fafafa; }
-        canvas { border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        body { margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #fafafa; color: #333; }
+        canvas { border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: block; margin: 0 auto; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .stats { max-width: 600px; margin: 20px auto; display: flex; justify-content: space-around; font-size: 0.9em; color: #666; }
     </style>
 </head>
 <body>
+
+    <div class="header">
+        <h2 id="sensor-title">Sensor 94448 Noise Levels</h2>
+        <p>Comparison: Today vs. Yesterday (Local Time)</p>
+    </div>
+
     <script>
         let sensorHistory = []; 
-        let maxPoints = 800 //30 * 288; //30 entries per API request, 288 is based on a request every 5 min
         let sensorID = "94448";
         let baseUrl = "https://data.sensor.community/airrohr/v1/sensor/" + sensorID + "/";
         let proxy = "https://corsproxy.io/?";
@@ -20,24 +29,22 @@
         let latestMax = 0, latestMin = 0, latestEq = 0;
 
         function setup() {
-            createCanvas(windowWidth, 400);
+            let canvas = createCanvas(windowWidth - 40, 400);
+            canvas.parent(document.body);
 
-            // 1. Load History from your GitHub Repo first
-            // Note: This file is created by logger.py
+            // 1. Load History from your GitHub Repo
             loadJSON("./data/sensor_history.json", (savedData) => {
-                console.log("Loading history...");
+                console.log("History loaded.");
                 for (let entry of savedData) {
-                    // Re-structure Python JSON to match processEntry's expectations
                     let mockEntry = {
                         timestamp: entry.timestamp,
                         sensordatavalues: Object.entries(entry.values).map(([k, v]) => ({value_type: k, value: v}))
                     };
                     processEntry(mockEntry);
                 }
-                // 2. After history is loaded, start real-time updates
                 startLivePolling();
             }, (err) => {
-                console.warn("History file not found (yet). Starting live only.");
+                console.warn("History file not found. Starting live mode.");
                 startLivePolling();
             });
         }
@@ -57,111 +64,129 @@
                 if (item.value_type === "noise_LA_min") mn = float(item.value);
             } 
             
-            // Convert UTC to Local Time
-            let timeLabel = new Date(entry.timestamp + "Z").toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            
+            // Note: We keep entry.timestamp exactly as it comes (UTC) 
+            // and handle Local conversion in the draw/mapping functions.
             latestMax = mx; latestEq = eq; latestMin = mn;
 
             let isNew = sensorHistory.length === 0 || entry.timestamp !== sensorHistory[sensorHistory.length - 1].fullTime;
             
             if (isNew) {
-                sensorHistory.push({ mx: mx, eq: eq, mn: mn, time: timeLabel, fullTime: entry.timestamp });
+                sensorHistory.push({ mx, eq, mn, fullTime: entry.timestamp });
             }
-            if (sensorHistory.length > maxPoints) sensorHistory.shift();
-        }
-
-        function getFreshUrl() {
-            let cacheBuster = "?cb=" + new Date().getTime();
-            return proxy + encodeURIComponent(baseUrl + cacheBuster);
+            // Keep roughly 48 hours of data (288 points per day * 2)
+            if (sensorHistory.length > 600) sensorHistory.shift();
         }
 
         function fetchNewest() {
-            loadJSON(getFreshUrl(), (response) => {
+            let cacheBuster = "?cb=" + new Date().getTime();
+            let url = proxy + encodeURIComponent(baseUrl + cacheBuster);
+            loadJSON(url, (response) => {
                 if (response && response.length > 0) processEntry(response[0]);
             });
         }
 
+        function getStaticX(timestamp) {
+            let d = new Date(timestamp + "Z");
+            let totalMins = d.getHours() * 60 + d.getMinutes();
+            return map(totalMins, 0, 1440, 60, width - 40);
+        }
+
         function draw() {
             background(255);
-            drawGrid();
+            drawFixedGrid();
 
-            if (sensorHistory.length < 2) {
-                textAlign(CENTER);
-                text("Initializing...", width / 2, height / 2);
+            if (sensorHistory.length < 1) {
+                textAlign(CENTER); text("Loading sensor data...", width / 2, height / 2);
                 return;
             }
 
-            // Draw Area Fill
-            noStroke();
-            fill(185, 185, 185, 80);
+            let now = new Date();
+            let todayStr = now.toLocaleDateString();
+            let yesterday = new Date();
+            yesterday.setDate(now.getDate() - 1);
+            let yesterdayStr = yesterday.toLocaleDateString();
+
+            // 1. DRAW YESTERDAY'S SHADOW
+            noFill();
+            stroke(200, 200, 200, 180); 
+            strokeWeight(1.5);
             beginShape();
-            for (let i = 0; i < sensorHistory.length; i++) {
-                let x = map(i, 0, maxPoints - 1, 60, width - 40);
-                let y = map(sensorHistory[i].mx, 0, yMax, height - 70, 50);
-                vertex(x, y);
-            }
-            for (let i = sensorHistory.length - 1; i >= 0; i--) {
-                let x = map(i, 0, maxPoints - 1, 60, width - 40);
-                let y = map(sensorHistory[i].mn, 0, yMax, height - 70, 50);
-                vertex(x, y);
-            }
-            endShape(CLOSE);
-
-            // Draw Average Line (Eq)
-            noFill(); stroke(0); strokeWeight(1.5);
-            beginShape();
-            for (let i = 0; i < sensorHistory.length; i++) {
-                let x = map(i, 0, maxPoints - 1, 60, width - 40);
-                let y = map(sensorHistory[i].eq, 0, yMax, height - 70, 50);
-                vertex(x, y);
-
-                // X- axis labels
-                //if (i % floor(maxPoints/12) === 0) {
-                //   push(); fill(120); noStroke(); textAlign(CENTER); textSize(9);
-                //   text(sensorHistory[i].time, x, height - 50); pop();
-                //}
-
-                // Inside the Average Line loop...
-                // --- NEW HOURLY LABEL LOGIC ---
-                if (i > 0) {
-                    // Get the hour from current and previous point
-                    // "14:05" -> "14"
-                    let currentHour = sensorHistory[i].time.split(':')[0];
-                    let prevHour = sensorHistory[i-1].time.split(':')[0];
-                    // If the hour just changed (e.g., from 13 to 14)
-                    if (currentHour !== prevHour) {
-                        push();
-                        fill(120);
-                        noStroke();
-                        textAlign(CENTER);
-                        textSize(10);
-                        // Draw a small tick mark
-                        stroke(200);
-                        line(x, height - 70, x, height - 65);
-                        // Draw the label (e.g., "14:00")
-                        noStroke();
-                        text(currentHour + ":00", x, height - 50);
-                        pop();
-                    }
+            for (let p of sensorHistory) {
+                let d = new Date(p.fullTime + "Z");
+                if (d.toLocaleDateString() === yesterdayStr) {
+                    vertex(getStaticX(p.fullTime), map(p.eq, 0, yMax, height - 70, 50));
                 }
             }
             endShape();
-            
-            // add text labels
-            fill(0); noStroke(); textAlign(LEFT); textSize(12);
-            text("Range: " + latestMin + " - " + latestMax + " dB (Avg: " + latestEq + ")", 30, 25);
-            text("Sensor " + sensorID + "; sensorHistory.length: " + sensorHistory.length, 30, 40);
+
+            // 2. DRAW TODAY'S RANGE (MIN/MAX)
+            noStroke();
+            fill(100, 150, 255, 40);
+            beginShape();
+            for (let p of sensorHistory) {
+                let d = new Date(p.fullTime + "Z");
+                if (d.toLocaleDateString() === todayStr) {
+                    vertex(getStaticX(p.fullTime), map(p.mx, 0, yMax, height - 70, 50));
+                }
+            }
+            for (let i = sensorHistory.length - 1; i >= 0; i--) {
+                let p = sensorHistory[i];
+                let d = new Date(p.fullTime + "Z");
+                if (d.toLocaleDateString() === todayStr) {
+                    vertex(getStaticX(p.fullTime), map(p.mn, 0, yMax, height - 70, 50));
+                }
+            }
+            endShape(CLOSE);
+
+            // 3. DRAW TODAY'S AVERAGE (EQUIVALENT) LINE
+            noFill(); stroke(0); strokeWeight(2);
+            beginShape();
+            for (let p of sensorHistory) {
+                let d = new Date(p.fullTime + "Z");
+                if (d.toLocaleDateString() === todayStr) {
+                    vertex(getStaticX(p.fullTime), map(p.eq, 0, yMax, height - 70, 50));
+                }
+            }
+            endShape();
+
+            // 4. DRAW CURRENT TIME & LEGEND
+            drawNowMarker();
+            drawLegend();
         }
 
-        function drawGrid() {
-            stroke(245);
-            for (let i = 0; i <= yMax; i += 10) {
-                let y = map(i, 0, yMax, height - 70, 50);
-                line(60, y, width - 40, y);
-                fill(180); noStroke(); textAlign(RIGHT); textSize(10);
-                text(i, 50, y + 4);
+        function drawFixedGrid() {
+            for (let h = 0; h <= 24; h++) {
+                let x = map(h * 60, 0, 1440, 60, width - 40);
+                stroke(245); line(x, 50, x, height - 70);
+                if (h % 3 === 0) {
+                    noStroke(); fill(180); textAlign(CENTER); textSize(10);
+                    text(h + ":00", x, height - 50);
+                }
             }
-            stroke(220); line(60, height - 70, width - 40, height - 70);
+            for (let d = 0; d <= yMax; d += 20) {
+                let y = map(d, 0, yMax, height - 70, 50);
+                stroke(250); line(60, y, width - 40, y);
+                noStroke(); fill(180); textAlign(RIGHT); text(d, 50, y + 4);
+            }
+        }
+
+        function drawNowMarker() {
+            let n = new Date();
+            let nowX = getStaticX(n.toISOString());
+            stroke(255, 0, 0, 150); line(nowX, 50, nowX, height - 70);
+            fill(255, 0, 0); noStroke(); textAlign(CENTER); textSize(10);
+            text("NOW", nowX, 45);
+        }
+
+        function drawLegend() {
+            textAlign(RIGHT); textSize(11);
+            fill(180); text("——— Yesterday", width - 40, 20);
+            fill(0);   text("——— Today (Avg)", width - 40, 35);
+            fill(100, 150, 255); text("■ Today Range (Min/Max)", width - 40, 50);
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth - 40, 400);
         }
     </script>
 </body>
