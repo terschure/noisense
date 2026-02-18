@@ -11,7 +11,7 @@
 <body>
     <script>
         let sensorHistory = []; 
-        let maxPoints = 30 * 288; //30 entries per API request, 288 is based on a request every 10 min
+        let maxPoints = 800 //30 * 288; //30 entries per API request, 288 is based on a request every 5 min
         let sensorID = "94448";
         let baseUrl = "https://data.sensor.community/airrohr/v1/sensor/" + sensorID + "/";
         let proxy = "https://corsproxy.io/?";
@@ -114,9 +114,35 @@
                 let x = map(i, 0, maxPoints - 1, 60, width - 40);
                 let y = map(sensorHistory[i].eq, 0, yMax, height - 70, 50);
                 vertex(x, y);
-                if (i % floor(maxPoints/12) === 0) {
-                   push(); fill(120); noStroke(); textAlign(CENTER); textSize(9);
-                   text(sensorHistory[i].time, x, height - 50); pop();
+
+                // X- axis labels
+                //if (i % floor(maxPoints/12) === 0) {
+                //   push(); fill(120); noStroke(); textAlign(CENTER); textSize(9);
+                //   text(sensorHistory[i].time, x, height - 50); pop();
+                //}
+
+                // Inside the Average Line loop...
+                // --- NEW HOURLY LABEL LOGIC ---
+                if (i > 0) {
+                    // Get the hour from current and previous point
+                    // "14:05" -> "14"
+                    let currentHour = sensorHistory[i].time.split(':')[0];
+                    let prevHour = sensorHistory[i-1].time.split(':')[0];
+                    // If the hour just changed (e.g., from 13 to 14)
+                    if (currentHour !== prevHour) {
+                        push();
+                        fill(120);
+                        noStroke();
+                        textAlign(CENTER);
+                        textSize(10);
+                        // Draw a small tick mark
+                        stroke(200);
+                        line(x, height - 70, x, height - 65);
+                        // Draw the label (e.g., "14:00")
+                        noStroke();
+                        text(currentHour + ":00", x, height - 50);
+                        pop();
+                    }
                 }
             }
             endShape();
