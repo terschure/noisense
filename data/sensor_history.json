@@ -1,245 +1,5 @@
 [
   {
-    "timestamp": "2026-02-18 03:58:54",
-    "values": {
-      "noise_LAeq": "38.56",
-      "noise_LA_min": "36.64",
-      "noise_LA_max": "44.46"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:04",
-    "values": {
-      "noise_LAeq": "37.94",
-      "noise_LA_min": "35.31",
-      "noise_LA_max": "42.50"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:14",
-    "values": {
-      "noise_LAeq": "37.51",
-      "noise_LA_min": "35.22",
-      "noise_LA_max": "40.04"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:25",
-    "values": {
-      "noise_LAeq": "36.68",
-      "noise_LA_min": "34.81",
-      "noise_LA_max": "39.37"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:35",
-    "values": {
-      "noise_LAeq": "37.21",
-      "noise_LA_min": "35.75",
-      "noise_LA_max": "40.71"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:45",
-    "values": {
-      "noise_LAeq": "37.03",
-      "noise_LA_min": "35.03",
-      "noise_LA_max": "46.09"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 03:59:55",
-    "values": {
-      "noise_LAeq": "36.41",
-      "noise_LA_min": "34.80",
-      "noise_LA_max": "39.56"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:05",
-    "values": {
-      "noise_LAeq": "36.67",
-      "noise_LA_min": "34.72",
-      "noise_LA_max": "42.78"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:16",
-    "values": {
-      "noise_LAeq": "36.36",
-      "noise_LA_min": "34.66",
-      "noise_LA_max": "39.65"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:26",
-    "values": {
-      "noise_LAeq": "36.54",
-      "noise_LA_min": "34.84",
-      "noise_LA_max": "40.90"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:36",
-    "values": {
-      "noise_LAeq": "36.80",
-      "noise_LA_min": "34.75",
-      "noise_LA_max": "39.55"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:47",
-    "values": {
-      "noise_LAeq": "36.48",
-      "noise_LA_min": "34.55",
-      "noise_LA_max": "40.15"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:00:57",
-    "values": {
-      "noise_LAeq": "37.15",
-      "noise_LA_min": "34.99",
-      "noise_LA_max": "39.82"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:07",
-    "values": {
-      "noise_LAeq": "36.73",
-      "noise_LA_min": "34.89",
-      "noise_LA_max": "41.45"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:17",
-    "values": {
-      "noise_LAeq": "36.72",
-      "noise_LA_min": "34.24",
-      "noise_LA_max": "44.28"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:27",
-    "values": {
-      "noise_LAeq": "37.66",
-      "noise_LA_min": "35.75",
-      "noise_LA_max": "41.44"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:37",
-    "values": {
-      "noise_LAeq": "37.14",
-      "noise_LA_min": "35.10",
-      "noise_LA_max": "39.82"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:48",
-    "values": {
-      "noise_LAeq": "36.71",
-      "noise_LA_min": "34.85",
-      "noise_LA_max": "41.41"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:01:59",
-    "values": {
-      "noise_LAeq": "36.86",
-      "noise_LA_min": "34.72",
-      "noise_LA_max": "41.66"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:02:09",
-    "values": {
-      "noise_LAeq": "37.24",
-      "noise_LA_min": "34.72",
-      "noise_LA_max": "41.83"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:02:19",
-    "values": {
-      "noise_LAeq": "36.83",
-      "noise_LA_min": "34.84",
-      "noise_LA_max": "40.29"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:02:30",
-    "values": {
-      "noise_LAeq": "36.83",
-      "noise_LA_min": "35.22",
-      "noise_LA_max": "39.79"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:02:40",
-    "values": {
-      "noise_LAeq": "36.71",
-      "noise_LA_min": "35.04",
-      "noise_LA_max": "40.61"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:02:50",
-    "values": {
-      "noise_LAeq": "36.81",
-      "noise_LA_min": "34.96",
-      "noise_LA_max": "42.80"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:00",
-    "values": {
-      "noise_LAeq": "36.68",
-      "noise_LA_min": "35.00",
-      "noise_LA_max": "39.44"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:10",
-    "values": {
-      "noise_LAeq": "36.89",
-      "noise_LA_min": "35.38",
-      "noise_LA_max": "40.65"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:21",
-    "values": {
-      "noise_LAeq": "36.71",
-      "noise_LA_min": "34.56",
-      "noise_LA_max": "42.18"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:31",
-    "values": {
-      "noise_LAeq": "36.55",
-      "noise_LA_min": "34.29",
-      "noise_LA_max": "42.31"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:41",
-    "values": {
-      "noise_LAeq": "36.67",
-      "noise_LA_min": "34.94",
-      "noise_LA_max": "42.97"
-    }
-  },
-  {
-    "timestamp": "2026-02-18 04:03:51",
-    "values": {
-      "noise_LAeq": "37.68",
-      "noise_LA_min": "35.02",
-      "noise_LA_max": "51.78"
-    }
-  },
-  {
     "timestamp": "2026-02-18 05:31:55",
     "values": {
       "noise_LAeq": "40.54",
@@ -5725,6 +5485,246 @@
       "noise_LAeq": "46.02",
       "noise_LA_min": "42.40",
       "noise_LA_max": "55.87"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:57:57",
+    "values": {
+      "noise_LAeq": "52.08",
+      "noise_LA_min": "45.17",
+      "noise_LA_max": "63.52"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:08",
+    "values": {
+      "noise_LAeq": "61.40",
+      "noise_LA_min": "47.21",
+      "noise_LA_max": "78.54"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:18",
+    "values": {
+      "noise_LAeq": "53.27",
+      "noise_LA_min": "44.69",
+      "noise_LA_max": "67.74"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:28",
+    "values": {
+      "noise_LAeq": "45.73",
+      "noise_LA_min": "43.86",
+      "noise_LA_max": "48.00"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:38",
+    "values": {
+      "noise_LAeq": "45.91",
+      "noise_LA_min": "43.44",
+      "noise_LA_max": "53.75"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:48",
+    "values": {
+      "noise_LAeq": "46.42",
+      "noise_LA_min": "44.28",
+      "noise_LA_max": "56.78"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:58:58",
+    "values": {
+      "noise_LAeq": "57.03",
+      "noise_LA_min": "44.69",
+      "noise_LA_max": "75.13"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:59:09",
+    "values": {
+      "noise_LAeq": "47.91",
+      "noise_LA_min": "44.86",
+      "noise_LA_max": "53.45"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:59:19",
+    "values": {
+      "noise_LAeq": "50.37",
+      "noise_LA_min": "45.92",
+      "noise_LA_max": "60.32"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:59:29",
+    "values": {
+      "noise_LAeq": "52.54",
+      "noise_LA_min": "45.75",
+      "noise_LA_max": "64.98"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:59:39",
+    "values": {
+      "noise_LAeq": "52.23",
+      "noise_LA_min": "46.19",
+      "noise_LA_max": "64.73"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 04:59:50",
+    "values": {
+      "noise_LAeq": "58.51",
+      "noise_LA_min": "46.97",
+      "noise_LA_max": "72.03"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:00",
+    "values": {
+      "noise_LAeq": "49.53",
+      "noise_LA_min": "45.68",
+      "noise_LA_max": "57.38"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:10",
+    "values": {
+      "noise_LAeq": "50.99",
+      "noise_LA_min": "45.41",
+      "noise_LA_max": "64.69"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:21",
+    "values": {
+      "noise_LAeq": "49.27",
+      "noise_LA_min": "45.07",
+      "noise_LA_max": "57.89"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:31",
+    "values": {
+      "noise_LAeq": "49.31",
+      "noise_LA_min": "44.04",
+      "noise_LA_max": "61.19"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:41",
+    "values": {
+      "noise_LAeq": "51.62",
+      "noise_LA_min": "45.44",
+      "noise_LA_max": "71.85"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:00:52",
+    "values": {
+      "noise_LAeq": "48.87",
+      "noise_LA_min": "44.92",
+      "noise_LA_max": "58.91"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:02",
+    "values": {
+      "noise_LAeq": "47.48",
+      "noise_LA_min": "44.91",
+      "noise_LA_max": "58.74"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:12",
+    "values": {
+      "noise_LAeq": "49.03",
+      "noise_LA_min": "45.36",
+      "noise_LA_max": "59.61"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:22",
+    "values": {
+      "noise_LAeq": "48.59",
+      "noise_LA_min": "44.71",
+      "noise_LA_max": "58.82"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:32",
+    "values": {
+      "noise_LAeq": "50.35",
+      "noise_LA_min": "45.03",
+      "noise_LA_max": "61.81"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:42",
+    "values": {
+      "noise_LAeq": "49.17",
+      "noise_LA_min": "45.51",
+      "noise_LA_max": "60.97"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:01:53",
+    "values": {
+      "noise_LAeq": "47.22",
+      "noise_LA_min": "44.98",
+      "noise_LA_max": "53.89"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:03",
+    "values": {
+      "noise_LAeq": "51.19",
+      "noise_LA_min": "46.62",
+      "noise_LA_max": "58.97"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:13",
+    "values": {
+      "noise_LAeq": "47.83",
+      "noise_LA_min": "44.92",
+      "noise_LA_max": "59.54"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:23",
+    "values": {
+      "noise_LAeq": "45.94",
+      "noise_LA_min": "43.95",
+      "noise_LA_max": "51.76"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:33",
+    "values": {
+      "noise_LAeq": "56.00",
+      "noise_LA_min": "45.44",
+      "noise_LA_max": "69.84"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:44",
+    "values": {
+      "noise_LAeq": "57.08",
+      "noise_LA_min": "45.40",
+      "noise_LA_max": "73.85"
+    }
+  },
+  {
+    "timestamp": "2026-02-19 05:02:54",
+    "values": {
+      "noise_LAeq": "51.68",
+      "noise_LA_min": "44.85",
+      "noise_LA_max": "65.32"
     }
   }
 ]
