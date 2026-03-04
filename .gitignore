@@ -1,0 +1,8 @@
+# ignore all .html files
+*.html
+
+# but do track the index.html file
+!index.html
+
+# ignore the error log
+/src/error_log.txt

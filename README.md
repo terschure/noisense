@@ -1,1 +1,2 @@
-# noisense.github.io
+# Noisense
+Visualising sound sensor data
