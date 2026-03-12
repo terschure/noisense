@@ -38,98 +38,139 @@ Data: JSON file
 const SENSOR_ID = "94448";
 const SENSOR_DATE = "2026-02-28";
 const DB_MAX = 100;
-let aboveThreshold = 0;
-const threshold = 70; 
-let inPeriod = false;
+const threshold = 48;
+const threshold2 = 70;
 
-// Pre-process into sensorHistory
+// ── CONFIG — set your JSONBin details here ──────────────────────────────────
+const JSONBIN_BIN_ID     = "69b1cdc7c3097a1dd519322d";
+const JSONBIN_ACCESS_KEY = "$2a$10$ADvovg8.oTelqlmX0njNZOaJR9ERemNqwaVsHzUqyFHxY6fTeOXhC";
+const POLL_INTERVAL_MS   = 5 * 60 * 1000; // 5 minutes
+// ────────────────────────────────────────────────────────────────────────────
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`;
+
 let sensorHistory = [];
-let latestMax = 0, latestEq = 0, latestMin = 0;
+let latestMax = 0, latestEq = 0, latestMin = 0; latestTime = "", latestDate = "";
+
+// FIX 1: aboveThreshold is computed once from sensorHistory, not accumulated
+//        across draw() frames. Moved computation into a helper function.
+function countAboveThreshold(type, thr, history) {
+  let count = 0;
+  let inPeriod = false;
+  for (let p of history) {
+    if (type == "max") {
+        if (p.mx >= thr && !inPeriod) {
+        count++;
+        inPeriod = true;
+        } else if (p.mx < thr) {
+        inPeriod = false;
+        }
+    } else {
+        if (p.eq >= thr && !inPeriod) {
+        count++;
+        inPeriod = true;
+        } else if (p.eq < thr) {
+        inPeriod = false;
+        }
+    }
+  }
+  return count;
+}
+
+async function loadData() {
+  try {
+    const res = await fetch(JSONBIN_URL, {
+      headers: { "X-Access-Key": JSONBIN_ACCESS_KEY }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    // Filter out placeholder rows
+    const raw = json.record.filter(r => r.timestamp !== "");
+    if (!raw.length) return;
+
+    // map raw records (which use entry.values.*) into {mx, eq, mn, fullTime}
+    sensorHistory = raw.map(r => ({
+      mx:       parseFloat(r.values.noise_LA_max) || 0,
+      eq:       parseFloat(r.values.noise_LAeq)   || 0,
+      mn:       parseFloat(r.values.noise_LA_min) || 0,
+      fullTime: r.timestamp
+    }));
+
+
+    if (sensorHistory.length) {
+      const last = sensorHistory[sensorHistory.length - 1];
+      latestMax = last.mx;
+      latestEq  = last.eq;
+      latestMin = last.mn;
+      latestTime = last.fullTime;
+      latestDate = last.fullTime.slice(0, 10);
+    }
+  }
+  catch (err) {
+    console.warn("History file not found or fetch error:", err);
+  }
+}
 
 function timeToAngle(hhmm) {
+  // slice(11,16) gives "HH:MM" cleanly
   let [h, m] = hhmm.split(':').map(Number);
   return ((h * 60 + m) / 1440) * 360;
 }
 
 function setup() {
-    createCanvas(windowHeight, windowHeight);
-    angleMode(DEGREES);
-    //noLoop(); // static chart, no need to redraw
-    loadJSON("data/sensor_2026-02-28.json", (savedData) => {
-        console.log("History loaded.");
-        for (let entry of savedData) {
-            let mockEntry = {
-                timestamp: entry.timestamp,
-                sensordatavalues: Object.entries(entry.values).map(([k, v]) => ({value_type: k, value: v}))
-                };
-                processEntry(mockEntry);
-            }
-            //startLivePolling();
-        noLoop();
-    }, (err) => {
-        console.warn("History file not found. Starting live mode.");
-        //startLivePolling();
-    });
-    //redraw();
-    console.log(sensorHistory);
+  createCanvas(windowHeight, windowHeight);
+  angleMode(DEGREES);
+  loadData();
+  setInterval(loadData, POLL_INTERVAL_MS); // update the data regularly
 }
 
 function draw() {
-    background(255);
-    const cx = width / 2, cy = height / 2;
-    const inner = 1, outer = height/2-10;
-    
-    // calculate number of periods above threshold
-    //aboveThreshold = sensorHistory.filter(p => p.eq >= threshold).length;
-    for (let p of sensorHistory) {
-    if (p.eq >= threshold && !inPeriod) {
-        aboveThreshold++;
-        inPeriod = true;
-    } else if (p.eq < threshold) {
-        inPeriod = false;
-    }
-}
+  background(255);
+  const cx = width / 2, cy = height / 2;
+  const inner = 1, outer = height / 2 - 10;
 
-    drawGrid(cx, cy, inner, outer);
-    drawClockLabels(cx, cy, outer);
-    drawData(cx, cy, inner, outer);
-    drawInfo();
+  // FIX 1 (continued): compute aboveThreshold fresh from current data each frame
+  //        instead of accumulating it as a global counter across frames.
+  const aboveThresholdEq = countAboveThreshold("eq", threshold, sensorHistory);
+  const aboveThresholdMax = countAboveThreshold("max", threshold2, sensorHistory);
+
+  drawGrid(cx, cy, inner, outer);
+  drawClockLabels(cx, cy, outer);
+  drawData(cx, cy, inner, outer);
+  drawInfo(aboveThresholdEq, aboveThresholdMax);
 }
 
 
 /* Functions */
 function processEntry(entry) {
-    let mx = 0, eq = 0, mn = 0;
-    if (!entry.sensordatavalues) return;
+  let mx = 0, eq = 0, mn = 0;
+  if (!entry.sensordatavalues) return;
 
-    for (let item of entry.sensordatavalues) {
-        if (item.value_type === "noise_LA_max") mx = float(item.value);
-            if (item.value_type === "noise_LAeq") eq = float(item.value);
-            if (item.value_type === "noise_LA_min") mn = float(item.value);
-    } 
-            
-    // Note: We keep entry.timestamp exactly as it comes (UTC) 
-    // and handle Local conversion in the draw/mapping functions.
-    latestMax = mx; latestEq = eq; latestMin = mn;
+  for (let item of entry.sensordatavalues) {
+    if (item.value_type === "noise_LA_max") mx = float(item.value);
+    if (item.value_type === "noise_LAeq")   eq = float(item.value);
+    if (item.value_type === "noise_LA_min") mn = float(item.value);
+  }
 
-    let isNew = sensorHistory.length === 0 || entry.timestamp !== sensorHistory[sensorHistory.length - 1].fullTime;
-            
-    if (isNew) {
-        sensorHistory.push({ mx, eq, mn, fullTime: entry.timestamp });
-    }
-    // Keep roughly a day's worth of data: A full day at 1 reading per 10 seconds = 8640 readings
-    if (sensorHistory.length > 8640) sensorHistory.shift();
+  latestMax = mx; latestEq = eq; latestMin = mn;
+
+  let isNew = sensorHistory.length === 0 ||
+              entry.timestamp !== sensorHistory[sensorHistory.length - 1].fullTime;
+
+  if (isNew) {
+    sensorHistory.push({ mx, eq, mn, fullTime: entry.timestamp });
+  }
+  if (sensorHistory.length > 8640) sensorHistory.shift();
 }
-
 
 function drawGrid(cx, cy, inner, outer) {
   textAlign(CENTER, BOTTOM);
   textSize(11);
 
-  [//[0, color(200), color(180)],
-   [35, color(100,150,255,100), color(100,150,255)],
-   [70, color(250,0,100,100),   color(220,0,80)], //[100, color(200), color(180)]
-   ].forEach(([db, sc, fc]) => {
+  [
+    [35, color(100, 150, 255, 100), color(100, 150, 255)],
+    [70, color(250, 0, 100, 100),   color(220, 0, 80)]
+  ].forEach(([db, sc, fc]) => {
     let r = map(db, 0, DB_MAX, inner, outer);
     stroke(sc); noFill();
     ellipse(cx, cy, r * 2);
@@ -147,65 +188,61 @@ function drawClockLabels(cx, cy, outer) {
   textStyle(NORMAL);
   fill(150); noStroke();
   text("06u", outer - 10, 0);
-  text("12u", 0, outer- 10);
-  text("18u", -(outer- 10), 0);
-  text("00u", 0, -(outer- 10));
+  text("12u", 0, outer - 10);
+  text("18u", -(outer - 10), 0);
+  text("00u", 0, -(outer - 10));
   pop();
 }
 
 function drawData(cx, cy, inner, outer) {
+  push();
+  translate(cx, cy);
+  rotate(-90); // 00:00 at top
 
-    push();
-    translate(cx, cy);
-    rotate(-90); // 00:00 at top
+  // Shaded min–max band
+  noStroke(); fill(150, 150, 150, 80);
+  beginShape();
+  for (let p of sensorHistory) {
+    // use slice(11,16) for clean "HH:MM"
+    let a = timeToAngle(p.fullTime.slice(11, 16));
+    let r = map(p.mx, 0, DB_MAX, inner, outer);
+    vertex(r * cos(a), r * sin(a));
+  }
+  for (let i = sensorHistory.length - 1; i >= 0; i--) {
+    let p = sensorHistory[i];
+    let a = timeToAngle(p.fullTime.slice(11, 16));
+    let r = map(p.mn, 0, DB_MAX, inner, outer);
+    vertex(r * cos(a), r * sin(a));
+  }
+  endShape(CLOSE);
 
-    // Shaded min–max band
-    noStroke(); fill(150, 150, 150, 80);
-    beginShape();
-    for (let p of sensorHistory) {
-        // convert time to local -- NOTE: I'm leaving this for now
-        // let d = new Date(p.fullTime + "Z");
-        // d.toLocaleDateString()
-        let a = timeToAngle(p.fullTime.slice(11, 19));
-        let r = map(p.mx, 0, DB_MAX, inner, outer);
-        vertex(r * cos(a), r * sin(a));
-    }
-    for (let i = sensorHistory.length - 1; i >= 0; i--) {
-        let p = sensorHistory[i];
-        let a = timeToAngle(p.fullTime.slice(11, 19));
-        let r = map(p.mn, 0, DB_MAX, inner, outer);
-        vertex(r * cos(a), r * sin(a));
-    }
-    endShape(CLOSE);
+  // LAeq line
+  noFill(); stroke(0); strokeWeight(1.5);
+  beginShape();
+  for (let p of sensorHistory) {
+    let a = timeToAngle(p.fullTime.slice(11, 16));
+    let r = map(p.eq, 0, DB_MAX, inner, outer);
+    vertex(r * cos(a), r * sin(a));
+  }
+  endShape();
 
-    // LAeq line
-    noFill(); stroke(0); strokeWeight(1.5);
-    beginShape();
-    for (let p of sensorHistory) {
-        let a = timeToAngle(p.fullTime.slice(11, 19));
-        let r = map(p.eq, 0, DB_MAX, inner, outer);
-        vertex(r * cos(a), r * sin(a));
-        //console.log(p);
-    }
-    endShape();
-
-    pop();
+  pop();
 }
 
-function drawInfo() {
-    fill(0); noStroke();
-    textAlign(LEFT);
-    textSize(13);
-    textStyle(NORMAL);
-    fill(60);
-    text("Sensor: " + SENSOR_ID, 6, height - 10);
-    //text("LAeq " + latestEq + " dB  (" + latestMin + "–" + latestMax + " dB)", 6, 16);
-    //text(sensorHistory.length + " metingen", 6, 32);
-    textAlign(RIGHT);
-    textStyle(BOLD);
-    text(SENSOR_DATE, width - 6, height - 10);
-    fill(220, 0, 80); // same red as your 70dB grid line
-    text(">" + threshold + " dB: " + aboveThreshold + "×", width - 6, height - 24);
+function drawInfo(aboveThresholdEq, aboveThresholdMax) {
+  fill(0); noStroke();
+  textAlign(LEFT);
+  textSize(13);
+  textStyle(NORMAL);
+  fill(60);
+  text("Sensor: " + SENSOR_ID, 6, height - 10);
+  textAlign(RIGHT);
+  textStyle(BOLD);
+  text(latestDate, width - 6, height - 10);
+  fill(220, 0, 80);
+  textStyle(NORMAL);
+  text("Eq > " + threshold + " dB: " + aboveThresholdEq + "×", width - 6, height - 36);
+  text("Max > " + threshold2 + " dB: " + aboveThresholdMax + "×", width - 6, height - 24);
 }
 </script>
 </body>

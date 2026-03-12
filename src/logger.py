@@ -4,7 +4,7 @@ import os
 import subprocess
 from datetime import datetime
 
-SENSOR_ID = "94448"
+SENSOR_ID = "93081"
 URL = f"https://data.sensor.community/airrohr/v1/sensor/{SENSOR_ID}/"
 base_dir = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(base_dir, "..", "data")
@@ -50,7 +50,7 @@ def update_data():
 
     updated_files = False
     for date_key, entries in grouped_data.items():
-        file_path = os.path.join(DATA_DIR, f"sensor_{date_key}.json")
+        file_path = os.path.join(DATA_DIR, f"sensor{SENSOR_ID}_{date_key}.json")
         
         existing_data = []
         if os.path.exists(file_path):
