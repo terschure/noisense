@@ -283,7 +283,7 @@ function parseRecords(raw) {
 // ── Geometry helpers ───────────────────────────────────────
 function timeToAngleDeg(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
-  return ((h * 60 + m) / 1440) * 360;
+  return ((h * 60 + m) / 1440) * 360 - 90;
 }
 function polarToXY(cx, cy, r, angleDeg) {
   const rad = angleDeg * Math.PI / 180;
