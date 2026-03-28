@@ -1,11 +1,13 @@
 # do not include the local files with sensitive info
 fetch_data.py
+generate-manifest.sh
 
 # ignore all .html files
 *.html
 
 # but do track the index.html file
 !index.html
+!gridview.html
 
 # ignore the error log
 /src/error_log.txt

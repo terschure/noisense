@@ -1,23 +1,126 @@
 <!DOCTYPE html>
 <html lang="nl">
+
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geluidssensor 2026-02-28</title>
+<title>Geluidssensor</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --ink:   #1a1a1a;
+    --muted: #aaa;
+    --red:   rgb(220, 0, 80);
+    --blue:  rgb(100, 150, 255);
+    --gap:   10px;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #fff;
     display: flex;
+    flex-direction: column;        /* stack header and canvas vertically */
     align-items: center;
-    justify-content: center;
     min-height: 100vh;
-    font-family: sans-serif;
+    font-family: 'IBM Plex Mono', monospace;
   }
-  canvas { display: block; }
+
+  header {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    gap: 16px;
+    flex-wrap: wrap;
+    /* remove position: absolute */
+  }
+  
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .ctrl-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ctrl-label input[type=text] {
+    background: none;
+    border: none;
+    border-bottom: 1px solid #ddd;
+    padding: 1px 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--ink);
+    width: 70px;
+    outline: none;
+  }
+  .ctrl-label input[type=text]:focus { border-bottom-color: var(--ink); }
+  .load-btn {
+    background: none;
+    border: 1px solid var(--ink);
+    padding: 3px 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.07em;
+    cursor: pointer;
+    color: var(--ink);
+    text-transform: uppercase;
+    transition: background 0.12s, color 0.12s;
+  }
+  .load-btn:hover { background: var(--ink); color: #fff; }
+
+  select {
+  background: none;
+  border: none;
+  border-bottom: 1px solid #ddd;
+  padding: 1px 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+  appearance: none;         /* removes default browser arrow */
+  -webkit-appearance: none;
+}
+
+select:focus {
+  border-bottom-color: var(--ink);
+}
+
 </style>
 </head>
+
 <body>
+<header>
+  <div class="controls">
+    <a href="./gridview.html"> Link naar andere weergave </a>
+    <label class="ctrl-label" for="sensorId">Kies een bestand:</label>
+      <select id="fileSelect">
+    <option value="">-- Select a dataset --</option>
+  </select>
+    </label>
+    <button class="load-btn" onclick="loadData()">Laden</button>
+    <span class="status-msg" id="status-msg"></span>
+  </div>
+  <div class="controls">
+    <label class="ctrl-label" for="speedSlider">
+    Snelheid:
+    <input type="range" id="speedSlider" min="1" max="6000" value="1" style="width:200px; accent-color:#a1a1a1; background-color: #aaa">
+    <span id="speedVal">1</span>
+    </label>
+  </div>
+</header>
+
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
 <script>
 /*
@@ -35,24 +138,39 @@ Data: JSON file
 
 */
 
-const SENSOR_ID = "94448";
+// playback settings
+let playbackIndex = 0;
+let playbackStartTime = null;  // real clock ms when file was loaded
+let dataStartTime = null; 
+
+//const POINTS_PER_FRAME = 1; // increase for faster playback
+let invertTimer = 0;
+let wasAboveThreshold = false;
+const fr = 8; //frame rate
+const INVERT_DURATION = 2; // frames (~0.5s at 60fps, ~1s at 30fps)
+let font;
+
+// general settings
+const SENSOR_ID = "93081";
 const SENSOR_DATE = "2026-02-28";
 const DB_MAX = 100;
 const threshold = 48;
 const threshold2 = 70;
 
-// ── CONFIG — set your JSONBin details here ──────────────────────────────────
-const JSONBIN_BIN_ID     = "69b1cdc7c3097a1dd519322d";
-const JSONBIN_ACCESS_KEY = "$2a$10$ADvovg8.oTelqlmX0njNZOaJR9ERemNqwaVsHzUqyFHxY6fTeOXhC";
-const POLL_INTERVAL_MS   = 5 * 60 * 1000; // 5 minutes
-// ────────────────────────────────────────────────────────────────────────────
-const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}/latest`;
+//const POLL_INTERVAL_MS   = 5 * 60 * 1000; // 5 minutes
+let health = 100;
+let maxHealth = 100;
 
 let sensorHistory = [];
+let visibleHistory = [];
 let latestMax = 0, latestEq = 0, latestMin = 0; latestTime = "", latestDate = "";
 
-// FIX 1: aboveThreshold is computed once from sensorHistory, not accumulated
-//        across draw() frames. Moved computation into a helper function.
+const speedSlider = document.getElementById('speedSlider');
+const speedVal = document.getElementById('speedVal');
+speedSlider.addEventListener('input', () => {
+  speedVal.textContent = speedSlider.value;
+});
+
 function countAboveThreshold(type, thr, history) {
   let count = 0;
   let inPeriod = false;
@@ -76,39 +194,59 @@ function countAboveThreshold(type, thr, history) {
   return count;
 }
 
-async function loadData() {
+async function populateDropdown() {
   try {
-    const res = await fetch(JSONBIN_URL, {
-      headers: { "X-Access-Key": JSONBIN_ACCESS_KEY }
-    });
+    const res = await fetch('data/manifest.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    const files = await res.json();
 
-    // Filter out placeholder rows
-    const raw = json.record.filter(r => r.timestamp !== "");
-    if (!raw.length) return;
-
-    // map raw records (which use entry.values.*) into {mx, eq, mn, fullTime}
-    sensorHistory = raw.map(r => ({
-      mx:       parseFloat(r.values.noise_LA_max) || 0,
-      eq:       parseFloat(r.values.noise_LAeq)   || 0,
-      mn:       parseFloat(r.values.noise_LA_min) || 0,
-      fullTime: r.timestamp
-    }));
-
-
-    if (sensorHistory.length) {
-      const last = sensorHistory[sensorHistory.length - 1];
-      latestMax = last.mx;
-      latestEq  = last.eq;
-      latestMin = last.mn;
-      latestTime = last.fullTime;
-      latestDate = last.fullTime.slice(0, 10);
-    }
+    const select = document.getElementById('fileSelect');
+    files.forEach(name => {
+      const option = document.createElement('option');
+      option.value = `data/${name}.json`;  // construct path from string
+      option.textContent = name;           // use string directly as label
+      select.appendChild(option);
+    });
+  } catch (err) {
+    console.error('populateDropdown failed:', err);
   }
-  catch (err) {
-    console.warn("History file not found or fetch error:", err);
+}
+
+async function loadData() {
+  const path = document.getElementById('fileSelect').value;
+  if (!path) return;
+  try {
+    loadJSON(path, (raw) => {
+      console.log("History loaded.");
+      sensorHistory = raw.map(r => ({
+        mx:       parseFloat(r.values.noise_LA_max) || 0,
+        eq:       parseFloat(r.values.noise_LAeq)   || 0,
+        mn:       parseFloat(r.values.noise_LA_min) || 0,
+        fullTime: r.timestamp
+      }));
+      if (sensorHistory.length) {
+        const last = sensorHistory[sensorHistory.length - 1];
+        latestMax  = last.mx;
+        latestEq   = last.eq;
+        latestMin  = last.mn;
+        latestTime = last.fullTime;
+        latestDate = last.fullTime.slice(0, 10);
+
+        // Record the anchors when file loads
+        playbackStartTime = millis();
+        dataStartTime = new Date(sensorHistory[0].fullTime).getTime();
+      }
+      playbackIndex = 0;
+    }, (err) => {
+      console.warn("History file not found.");
+    });
+  } catch (err) {
+    console.warn("Fetch error:", err);
   }
+  // Reset health and visual state
+  health = maxHealth;
+  invertTimer = 0;
+  wasAboveThreshold = false;
 }
 
 function timeToAngle(hhmm) {
@@ -118,26 +256,105 @@ function timeToAngle(hhmm) {
 }
 
 function setup() {
-  createCanvas(windowHeight, windowHeight);
+  frameRate(fr);
+  const headerHeight = document.querySelector('header').offsetHeight;
+  const size = min(windowWidth, windowHeight - headerHeight);
+  let cnv = createCanvas(size, size);
   angleMode(DEGREES);
-  loadData();
-  setInterval(loadData, POLL_INTERVAL_MS); // update the data regularly
+  font = loadFont('https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf');
+  textFont(font);
+
+  // Attach click handler directly to the canvas element
+  cnv.mouseClicked(() => {
+    playbackIndex = 0;
+    invertTimer = 0;
+    wasAboveThreshold = false;
+  });
+  
+  //loadData();
+  populateDropdown();
+  //setInterval(loadData, POLL_INTERVAL_MS); // update the data regularly
 }
 
 function draw() {
   background(255);
   const cx = width / 2, cy = height / 2;
-  const inner = 1, outer = height / 2 - 10;
+  const inner = 0, outer = height / 2 - 10;
 
-  // FIX 1 (continued): compute aboveThreshold fresh from current data each frame
-  //        instead of accumulating it as a global counter across frames.
-  const aboveThresholdEq = countAboveThreshold("eq", threshold, sensorHistory);
-  const aboveThresholdMax = countAboveThreshold("max", threshold2, sensorHistory);
+  // Advance playback
+  //let visibleHistory;
 
-  drawGrid(cx, cy, inner, outer);
-  drawClockLabels(cx, cy, outer);
-  drawData(cx, cy, inner, outer);
-  drawInfo(aboveThresholdEq, aboveThresholdMax);
+  if (playbackStartTime === null) {
+    visibleHistory = [];
+  } else {
+    const realElapsedMs = millis() - playbackStartTime;
+    const dataElapsedMs = realElapsedMs * int(speedSlider.value); // 1:1 at speed 1
+    const cutoff = dataStartTime + dataElapsedMs;
+
+    visibleHistory = sensorHistory.filter(p => 
+      new Date(p.fullTime).getTime() <= cutoff
+    );
+  }
+
+  //if (playbackIndex < sensorHistory.length) {
+  //  playbackIndex = min(playbackIndex + getPointsPerFrame(), sensorHistory.length);
+  //}
+  //const visibleHistory = sensorHistory.slice(0, playbackIndex);
+
+  // calculate number of periods above the thresholds
+  const aboveThresholdEq = countAboveThreshold("eq", threshold, visibleHistory);
+  const aboveThresholdMax = countAboveThreshold("max", threshold2, visibleHistory);
+  
+  drawData(cx, cy, inner, outer, visibleHistory);
+  
+  
+  // invert colours when threshold is met for playback values // ADJUST FOR LATEST VALUES
+  if (visibleHistory.length > 0) {
+  const current = visibleHistory[visibleHistory.length - 1];
+  const isAboveMx = current.mx >= threshold2;
+  const isAboveEq = current.eq >= threshold;
+  const isBelowEq = current.eq <= threshold;
+
+    if (isAboveEq && visibleHistory.length < sensorHistory.length) {
+      if (health > 0) {
+        health-=1;
+      }
+    }
+    if (isAboveMx && visibleHistory.length < sensorHistory.length) {
+    invertTimer = INVERT_DURATION;
+      if (health > 0) {
+        health-=2;
+      }
+    }
+    if (isBelowEq && health < maxHealth && visibleHistory.length < sensorHistory.length) {
+        health++;
+    }
+
+    if (invertTimer > 0) {
+      //filter(INVERT);
+      //filter(THRESHOLD, 0.5); // converts to black & white, value 0–1
+      //filter(GRAY);           // desaturates to grayscale
+      //filter(POSTERIZE, 4);   // reduces colour levels, value 2–255
+      //filter(BLUR, 2);        // gaussian blur, value = radius in pixels
+      filter(ERODE);          // shrinks bright areas (no value needed)
+      //filter(DILATE);         // expands bright areas (no value needed)
+
+      // make the red line thicker?
+      //let r = map(threshold2, 0, DB_MAX, inner, outer);
+      //stroke(250, 0, 100, 100); strokeWeight(4); noFill();
+      //ellipse(cx, cy, r * 2);
+      //strokeWeight(1);
+
+      invertTimer--;
+    }
+    }
+    drawPlayhead(cx, cy, inner, outer, visibleHistory);
+    drawGrid(cx, cy, inner, outer);
+    drawClockLabels(cx, cy, outer);
+    drawInfo(aboveThresholdEq, aboveThresholdMax);
+    drawHeart();
+    updateHealth(health, maxHealth);
+    drawFinished(cx, cy, aboveThresholdMax);
 }
 
 
@@ -166,10 +383,11 @@ function processEntry(entry) {
 function drawGrid(cx, cy, inner, outer) {
   textAlign(CENTER, BOTTOM);
   textSize(11);
+  strokeWeight(0.5);
 
   [
-    [35, color(100, 150, 255, 100), color(100, 150, 255)],
-    [70, color(250, 0, 100, 100),   color(220, 0, 80)]
+    [35, color(100, 150, 255, 255), color(100, 150, 255)],
+    [70, color(250, 0, 100, 255),   color(220, 0, 80)]
   ].forEach(([db, sc, fc]) => {
     let r = map(db, 0, DB_MAX, inner, outer);
     stroke(sc); noFill();
@@ -194,12 +412,12 @@ function drawClockLabels(cx, cy, outer) {
   pop();
 }
 
-function drawData(cx, cy, inner, outer) {
+function drawData(cx, cy, inner, outer, history) {
   push();
   translate(cx, cy);
   rotate(-90); // 00:00 at top
 
-  // Shaded min–max band
+  /*// Shaded min–max band
   noStroke(); fill(150, 150, 150, 80);
   beginShape();
   for (let p of sensorHistory) {
@@ -214,12 +432,24 @@ function drawData(cx, cy, inner, outer) {
     let r = map(p.mn, 0, DB_MAX, inner, outer);
     vertex(r * cos(a), r * sin(a));
   }
-  endShape(CLOSE);
+  endShape(CLOSE); */
+
+  // Min–max bars
+  //stroke(100, 100, 100, 120);
+  strokeWeight(1);
+  noFill();
+  for (let i = 0; i < history.length; i++) {
+    stroke(100,100,100,map(history[i].eq, 20, DB_MAX-20, 0, 255));
+    let a = timeToAngle(history[i].fullTime.slice(11, 16));
+    let rMin = map(history[i].mn, 0, DB_MAX, inner, outer);
+    let rMax = map(history[i].mx, 0, DB_MAX, inner, outer);
+    line(rMin * cos(a), rMin * sin(a), rMax * cos(a), rMax * sin(a));
+  }
 
   // LAeq line
   noFill(); stroke(0); strokeWeight(1.5);
   beginShape();
-  for (let p of sensorHistory) {
+  for (let p of history) {
     let a = timeToAngle(p.fullTime.slice(11, 16));
     let r = map(p.eq, 0, DB_MAX, inner, outer);
     vertex(r * cos(a), r * sin(a));
@@ -229,20 +459,151 @@ function drawData(cx, cy, inner, outer) {
   pop();
 }
 
+function drawHeart () {
+  let x = width - 180;
+  let y = height - 28;
+  let size = 14;
+  fill(220, 0, 80);
+
+  if (health <= 0) {
+    fill(100,100,100, 100);
+    size = 14 - 2 * sin(frameCount * 1);
+  }
+
+  beginShape();
+  stroke(0);
+  strokeWeight(1);
+
+  vertex(x, y);
+  bezierVertex(x - size / 2, y - size / 2, x - size, y + size / 3, x, y + size);
+  bezierVertex(x + size, y + size / 3, x + size / 2, y - size / 2, x, y);
+  endShape(CLOSE);
+
+  // draw health rectangle
+  stroke(0);
+  let sw = 1;
+  strokeWeight(sw);
+  noFill();
+  rect(width - 160, height - 28, 154, 11); // x, y, l, h
+}
+
+function updateHealth(health, maxHealth) {
+  
+  if (history.length >= sensorHistory.length) return;
+  let sw = 1;
+  noStroke();
+  fill(220, 0, 80);
+  // Remap health
+  rect(width - 160 + sw/2, height - 28 + sw/2, 
+    map(health, 0, maxHealth, 0, 154 - sw), 11 - sw);
+}
+
 function drawInfo(aboveThresholdEq, aboveThresholdMax) {
   fill(0); noStroke();
   textAlign(LEFT);
   textSize(13);
   textStyle(NORMAL);
   fill(60);
-  text("Sensor: " + SENSOR_ID, 6, height - 10);
-  textAlign(RIGHT);
+  //text("Sensor: " + SENSOR_ID, 6, height - 24);
   textStyle(BOLD);
-  text(latestDate, width - 6, height - 10);
-  fill(220, 0, 80);
+  text(latestDate, 6, height - 10);
+  
+  textAlign(RIGHT);
   textStyle(NORMAL);
-  text("Eq > " + threshold + " dB: " + aboveThresholdEq + "×", width - 6, height - 36);
-  text("Max > " + threshold2 + " dB: " + aboveThresholdMax + "×", width - 6, height - 24);
+  fill(100, 100, 100);
+  text("Eq > " + threshold + " dB: " + aboveThresholdEq + "x", width - 6, height - 42);
+  fill(220, 0, 80);
+  text("Max > " + threshold2 + " dB: " + aboveThresholdMax + "x", width - 6, height - 30);
+}
+
+function drawPlayhead(cx, cy, inner, outer, history) {
+  if (history.length === 0) return;
+  if (history.length >= sensorHistory.length) return;
+
+  const last = history[history.length - 1];
+  const next = sensorHistory[history.length]; // the upcoming point
+
+  // How far between last and next timestamp (0–1)
+  const lastT = new Date(last.fullTime).getTime();
+  const nextT = new Date(next.fullTime).getTime();
+  const realElapsedMs = millis() - playbackStartTime;
+  const dataElapsedMs = realElapsedMs * int(speedSlider.value);
+  const nowT = dataStartTime + dataElapsedMs;
+  const t = constrain((nowT - lastT) / (nextT - lastT), 0, 1);
+
+  // Interpolate angle and radius
+  const aLast = timeToAngle(last.fullTime.slice(11, 16));
+  const aNext = timeToAngle(next.fullTime.slice(11, 16));
+  const rLast = map(max(last.mx, threshold2), 0, DB_MAX, inner, outer);
+  const rNext = map(max(next.mx, threshold2), 0, DB_MAX, inner, outer);
+
+  const a = lerp(aLast, aNext, t);
+  const r = lerp(rLast, rNext, t);
+
+  push();
+  translate(cx, cy);
+  rotate(-90);
+
+  // Comet tail (unchanged, still uses history)
+  const tailLength = 8;
+  const start = max(0, history.length - tailLength);
+  for (let i = start; i < history.length - 1; i++) {
+    const p = history[i];
+    const pa = timeToAngle(p.fullTime.slice(11, 16));
+    const pr = map(max(p.mx, threshold2), 0, DB_MAX, inner, outer);
+    const alpha = map(i, start, history.length - 1, 40, 160);
+    stroke(220, 0, 80, alpha);
+    strokeWeight(6);
+    point(pr * cos(pa), pr * sin(pa));
+  }
+
+  // Pulsing dot at interpolated position
+  const pulse = 4 + 2 * sin(frameCount * 0.4);
+  const px = r * cos(a);
+  const py = r * sin(a);
+
+  noFill(); stroke(220, 0, 80, 80); strokeWeight(1);
+  ellipse(px, py, (pulse + 4) * 2);
+
+  fill(220, 0, 80); noStroke();
+  ellipse(px, py, pulse * 2);
+
+  pop();
+}
+
+function windowResized() {
+  const headerHeight = document.querySelector('header').offsetHeight;
+  const size = min(windowWidth, windowHeight - headerHeight);
+  resizeCanvas(size, size);
+}
+
+/*function getPointsPerFrame() {
+  // Target: finish playback in X seconds regardless of dataset size
+  const TARGET_FRAMES = 86400 * fr;
+  const density = max(1, floor(sensorHistory.length / TARGET_FRAMES));
+  return density * int(speedSlider.value);
+}*/
+
+
+function drawFinished(cx, cy, aboveThresholdMax) {
+  if (sensorHistory.length === 0) return;
+  if (visibleHistory.length < sensorHistory.length) return; // not done yet
+
+  push();
+  textAlign(CENTER, CENTER);
+  noStroke();
+
+  // Large count
+  fill(220, 0, 80);
+  textSize(68);
+  textStyle(BOLD);
+  text(aboveThresholdMax + "x", cx, cy - 16);
+
+  // Label below
+  textSize(11);
+  textStyle(NORMAL);
+  text("boven " + threshold2 + " dB", cx, cy + 36);
+  pop();
 }
 </script>
 </body>
