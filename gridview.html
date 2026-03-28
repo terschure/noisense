@@ -407,7 +407,7 @@ function drawDayDiagram(canvas, history, explicitSize) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const tickR = outer + pad * 0.55;
-  [['00', 0], ['06', 90], ['12', 180], ['18', -90]].forEach(([lbl, a]) => {
+  [['00', - 90], ['06', 0], ['12', 90], ['18', -180]].forEach(([lbl, a]) => {
     const [x, y] = polarToXY(cx, cy, tickR, a);
     ctx.fillText(lbl, x, y);
   });
