@@ -44,6 +44,10 @@
     gap: 14px;
     flex-wrap: wrap;
   }
+  .center {
+    margin: auto;
+  }
+
   .ctrl-label {
     font-size: 12px;
     color: var(--muted);
@@ -96,22 +100,37 @@
     border-bottom-color: var(--ink);
   }
 
+  .status-msg { font-size: 10px; color: var(--muted); }
+  .status-msg.error { color: var(--red); }
+
+  input[type=range]:disabled {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
 </style>
 </head>
 
 <body>
 <header>
   <div class="controls">
-    <a class="ctrl-label" href="./gridview.html"> Link naar andere weergave </a>
-    <label class="ctrl-label" for="sensorId">Kies een bestand:</label>
+    <a class="ctrl-label" href="./gridview.html"> Naar gridview </a>
+    <label class="ctrl-label" for="dataId">Kies een bestand:</label>
       <select id="fileSelect">
-    <option value="">-- Select a dataset --</option>
+    <option value="">-- Selecteer dataset --</option>
   </select>
     </label>
-    <button class="load-btn" onclick="loadData()">Laden</button>
-    <span class="status-msg" id="status-msg"></span>
+    <button class="load-btn" onclick="loadData('datafile')">Laden</button>
   </div>
+  <div class="center"><span class="status-msg" id="status-msg"></span></div>
   <div class="controls">
+    <label class="ctrl-label" for="sensorId">Kies een live sensor:</label>
+      <select name="Sensor" id="sensorId">
+        <option value="93081">93081</option>
+        <option value="94448">94448</option>
+      </select>
+      <button class="load-btn" id="liveBtn" onclick="loadData('live')">Live</button>
+    </label>
     <label class="ctrl-label" for="speedSlider">
     Snelheid:
     <input type="range" id="speedSlider" min="1" max="6000" value="1" style="width:200px; accent-color:#a1a1a1; background-color: #aaa">
@@ -138,6 +157,9 @@ Data: JSON file
 
 */
 
+let dataMode = null;
+let isLoading = false;
+
 // playback settings
 let playbackIndex = 0;
 let playbackStartTime = null;  // real clock ms when file was loaded
@@ -151,8 +173,6 @@ const INVERT_DURATION = 2; // frames (~0.5s at 60fps, ~1s at 30fps)
 let font;
 
 // general settings
-const SENSOR_ID = "93081";
-const SENSOR_DATE = "2026-02-28";
 const DB_MAX = 100;
 const threshold = 48;
 const threshold2 = 70;
@@ -212,12 +232,83 @@ async function populateDropdown() {
   }
 }
 
-async function loadData() {
-  const path = document.getElementById('fileSelect').value;
-  if (!path) return;
-  try {
+async function loadData(mode) {
+  isLoading = true;
+  if (mode !== 'live') dataMode = mode;
+  health = maxHealth;
+  invertTimer = 0;
+  wasAboveThreshold = false;
+
+  if (mode === 'live') {
+    isLiveStopped = false;
+    playbackIndex = 0;
+    const sensorId = document.getElementById('sensorId').value;
+    const url = `https://data.sensor.community/airrohr/v1/sensor/${sensorId}/`;
+
+    // Grey out speed slider
+    document.getElementById('speedSlider').disabled = true;
+    document.getElementById('speedSlider').value = 1;
+    speedVal.textContent = 1; 
+
+    // Switch button to Stop
+    const btn = document.getElementById('liveBtn');
+    btn.textContent = 'Stop';
+    btn.onclick = stopLive;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const response = await res.json();
+
+      if (response && response.length > 0) {
+        sensorHistory = [];
+        const history = [...response].reverse(); // spread before reversing
+        for (let entry of history) {
+          processEntry(entry);
+        }
+        if (sensorHistory.length) {
+          const last = sensorHistory[sensorHistory.length - 1];
+          latestDate = last.fullTime.slice(0, 10);
+          playbackStartTime = millis();
+          dataStartTime = new Date(sensorHistory[0].fullTime).getTime();
+          playbackIndex = sensorHistory.length;
+          dataMode = 'live'; // only after playbackIndex is set
+        }
+        //playbackIndex = 0;
+        document.getElementById('status-msg').textContent = 'Live data aan het ophalen';
+
+        clearInterval(window._liveInterval);
+        window._liveInterval = setInterval(async () => {
+          const r = await fetch(url);
+          const data = await r.json();
+          if (data && data.length > 0) {
+            const history = [...data].reverse(); // oldest first
+            for (let entry of history) {
+              processEntry(entry);
+            }
+          }
+        }, 15000); // fetches data every 15 seconds
+      }
+    } catch (err) {
+      console.error('Live fetch mislukt:', err);
+      document.getElementById('status-msg').textContent = 'Fout bij laden.';
+      stopLive(); // reset button if fetch fails
+    }
+    isLoading = false;
+  } else {
+    // resets
+    isLiveStopped = false;
+    clearInterval(window._liveInterval);
+    document.getElementById('speedSlider').disabled = false;
+    const btn = document.getElementById('liveBtn');
+    btn.textContent = 'Live';
+    btn.onclick = () => loadData('live');
+
+    // get data
+    const path = document.getElementById('fileSelect').value;
+    if (!path) return;
     loadJSON(path, (raw) => {
-      console.log("History loaded.");
+      if (dataMode === 'live') return;
       sensorHistory = raw.map(r => ({
         mx:       parseFloat(r.values.noise_LA_max) || 0,
         eq:       parseFloat(r.values.noise_LAeq)   || 0,
@@ -231,22 +322,13 @@ async function loadData() {
         latestMin  = last.mn;
         latestTime = last.fullTime;
         latestDate = last.fullTime.slice(0, 10);
-
-        // Record the anchors when file loads
         playbackStartTime = millis();
         dataStartTime = new Date(sensorHistory[0].fullTime).getTime();
       }
       playbackIndex = 0;
-    }, (err) => {
-      console.warn("History file not found.");
+      isLoading = false;
     });
-  } catch (err) {
-    console.warn("Fetch error:", err);
   }
-  // Reset health and visual state
-  health = maxHealth;
-  invertTimer = 0;
-  wasAboveThreshold = false;
 }
 
 function timeToAngle(hhmm) {
@@ -266,6 +348,7 @@ function setup() {
 
   // Attach click handler directly to the canvas element
   cnv.mouseClicked(() => {
+    if (dataMode === 'live') return;
     playbackIndex = 0;
     invertTimer = 0;
     wasAboveThreshold = false;
@@ -286,12 +369,13 @@ function draw() {
 
   if (playbackStartTime === null) {
     visibleHistory = [];
+  } else if (dataMode === 'live') {
+    visibleHistory = sensorHistory;
   } else {
     const realElapsedMs = millis() - playbackStartTime;
-    const dataElapsedMs = realElapsedMs * int(speedSlider.value); // 1:1 at speed 1
+    const dataElapsedMs = realElapsedMs * int(speedSlider.value);
     const cutoff = dataStartTime + dataElapsedMs;
-
-    visibleHistory = sensorHistory.filter(p => 
+    visibleHistory = sensorHistory.filter(p =>
       new Date(p.fullTime).getTime() <= cutoff
     );
   }
@@ -309,24 +393,24 @@ function draw() {
   
   
   // invert colours when threshold is met for playback values // ADJUST FOR LATEST VALUES
-  if (visibleHistory.length > 0) {
+  if (!isLoading && visibleHistory.length > playbackIndex) {
   const current = visibleHistory[visibleHistory.length - 1];
   const isAboveMx = current.mx >= threshold2;
   const isAboveEq = current.eq >= threshold;
   const isBelowEq = current.eq <= threshold;
 
-    if (isAboveEq && visibleHistory.length < sensorHistory.length) {
+    if (isAboveEq && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
       if (health > 0) {
         health-=1;
       }
     }
-    if (isAboveMx && visibleHistory.length < sensorHistory.length) {
+    if (isAboveMx && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
     invertTimer = INVERT_DURATION;
       if (health > 0) {
         health-=2;
       }
     }
-    if (isBelowEq && health < maxHealth && visibleHistory.length < sensorHistory.length) {
+    if (isBelowEq && health < maxHealth && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
         health++;
     }
 
@@ -347,7 +431,8 @@ function draw() {
 
       invertTimer--;
     }
-    }
+    playbackIndex = visibleHistory.length;
+  }
     drawPlayhead(cx, cy, inner, outer, visibleHistory);
     drawGrid(cx, cy, inner, outer);
     drawClockLabels(cx, cy, outer);
@@ -489,7 +574,7 @@ function drawHeart () {
 
 function updateHealth(health, maxHealth) {
   
-  if (history.length >= sensorHistory.length) return;
+  if (dataMode !== 'live' && visibleHistory.length >= sensorHistory.length) return;
   let sw = 1;
   noStroke();
   fill(220, 0, 80);
@@ -518,6 +603,29 @@ function drawInfo(aboveThresholdEq, aboveThresholdMax) {
 
 function drawPlayhead(cx, cy, inner, outer, history) {
   if (history.length === 0) return;
+
+  if (dataMode === 'live') {
+    const last = history[history.length - 1];
+    const a = timeToAngle(last.fullTime.slice(11, 16));
+    const r = map(max(last.mx, threshold2), 0, DB_MAX, inner, outer);
+
+    push();
+    translate(cx, cy);
+    rotate(-90);
+
+    const pulse = 4 + 1 * sin(frameCount * 5);
+    const px = r * cos(a);
+    const py = r * sin(a);
+
+    noFill(); stroke(220, 0, 80, 80); strokeWeight(1);
+    ellipse(px, py, (pulse + 4) * 2);
+    fill(220, 0, 80); noStroke();
+    ellipse(px, py, pulse * 2);
+
+    pop();
+    return;
+  }
+
   if (history.length >= sensorHistory.length) return;
 
   const last = history[history.length - 1];
@@ -584,10 +692,30 @@ function windowResized() {
   return density * int(speedSlider.value);
 }*/
 
+function stopLive() {
+  clearInterval(window._liveInterval);
+
+  // trigger drawfinished
+  playbackIndex = visibleHistory.length;
+
+  // Re-enable speed slider
+  document.getElementById('speedSlider').disabled = false;
+
+  // Reset button back to Live
+  const btn = document.getElementById('liveBtn');
+  btn.textContent = 'Live';
+  btn.onclick = () => loadData('live');
+
+  document.getElementById('status-msg').textContent = '';
+
+  isLiveStopped = true;
+}
 
 function drawFinished(cx, cy, aboveThresholdMax) {
   if (sensorHistory.length === 0) return;
-  if (visibleHistory.length < sensorHistory.length) return; // not done yet
+  if (dataMode === 'live' && !isLiveStopped) return; // never show during live;
+  if (dataMode !== 'live' && visibleHistory.length < sensorHistory.length) return;
+
 
   push();
   textAlign(CENTER, CENTER);
@@ -605,6 +733,8 @@ function drawFinished(cx, cy, aboveThresholdMax) {
   text("boven " + threshold2 + " dB", cx, cy + 36);
   pop();
 }
+
+
 </script>
 </body>
 </html>
