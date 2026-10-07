@@ -2,7 +2,7 @@
 Visualising sound sensor data
 
 ## General description
-Noisense is a web-based visualisation of sound sensor data retrieved from two sensors located in the Netherlands, meant as an artistic approach for communicating and discussing issues around sound pollution, and a prototype for visualising these types of data.
+Noisense is a web-based visualisation of sound sensor data retrieved from two sensors located in the Netherlands. It is meant as an artistic approach for communicating and discussing issues around sound pollution, and as a prototype for visualising these types of data.
 
 The main page highlights the number of peaks in noise, and how often these are above certain noise levels, with a red line indicating 70 dB, marking a high-exposure bracket where people experience serious annoyance and disruption. You can either chose an existing dataset from a day in the past to load and view, or you can collect the live data. If you chose an existing dataset, you can speed up the visualisation with the slider on the right.
 
