@@ -1,5 +1,5 @@
 # Noisense
-Visualising sound sensor data
+Visualising sound sensor data.
 
 ## General description
 Noisense is a web-based visualisation of sound sensor data retrieved from two sensors located in the Netherlands. It is meant as an artistic approach for communicating and discussing issues around sound pollution, and as a prototype for visualising these types of data.
@@ -11,6 +11,7 @@ On the top left you can switch to a different view, showing all of the existing 
 
 ## Data collection
 Original plan: the data is fetched from the sensor API every five minutes and stored online at JSONBin for max 24h, at midnight this JSON is copied to a local file and emptied. However, JSONBin has a limited number of actions in the free version, so to have this running permanently this will add costs.
+
 Current prototype: a local server fetches the data and stores it in a separate file for each day.
 The live feed stores the data directly in the browser, but the datafiles are static, and were previously retrieved by a task scheduler on a local computer using the fetch_data_locally.py that can be found in the src folder.
 
