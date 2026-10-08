@@ -105,6 +105,12 @@
   .col-stepper button:hover { border-color: var(--ink); }
   .col-count { min-width: 14px; text-align: center; color: var(--ink); }
 
+  .mode-btn {
+  width: auto !important;
+  padding: 0 8px;
+  letter-spacing: 0.05em;
+  }
+
   .load-btn {
     background: none;
     border: 1px solid var(--ink);
@@ -196,10 +202,14 @@
     text-transform: uppercase;
   }
   #lightbox-stats {
-    font-size: 14px;
-    display: flex;
-    gap: 24px;
+  font-size: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 24px;
   }
+  #lightbox-stats .stat-blue { text-align: right; }
+  #lightbox-stats .stat-red  { text-align: left; }
   #lightbox-close {
     position: fixed;
     top: 18px; right: 22px;
@@ -226,13 +236,17 @@
         <option value="94448">94448</option>
       </select>
     </label>
+    <button class="load-btn" onclick="loadAll()">Laden</button>
     <div class="col-stepper">
       Kolommen
       <button onclick="adjustCols(-1)">−</button>
       <span class="col-count" id="col-count">4</span>
       <button onclick="adjustCols(1)">+</button>
     </div>
-    <button class="load-btn" onclick="loadAll()">Laden</button>
+    <div class="col-stepper">
+    Highlight
+    <button id="mode-btn" class="mode-btn" onclick="toggleMode()">perioden</button>
+    </div>
     <span class="status-msg" id="status-msg"></span>
   </div>
 </header>
@@ -252,7 +266,7 @@
 <script>
 // ── Constants ──────────────────────────────────────────────
 const DB_MAX     = 100;
-const THRESHOLD1 = 35;
+const THRESHOLD1 = 48;
 const THRESHOLD2 = 70;
 const DATA_PATH  = 'data/';
 
@@ -269,6 +283,20 @@ function adjustCols(delta) {
     });
   }, 50);
 }
+
+let countMode = 'periods';   
+
+// Count 'periods' | 'points' ─────────────────────────────────────────
+
+function toggleMode() {
+  countMode = countMode === 'periods' ? 'points' : 'periods';
+  document.getElementById('mode-btn').textContent =
+    countMode === 'periods' ? 'perioden' : 'metingen';
+  document.querySelectorAll('canvas.day-canvas').forEach(c => {
+    if (c._records !== undefined) drawDayDiagram(c, c._records);
+  });
+}
+
 
 // ── Parse raw JSON ─────────────────────────────────────────
 function parseRecords(raw) {
@@ -306,17 +334,20 @@ function countCrossings(history, type, thr) {
 // ── Periods above red threshold, with duration ─────────────
 function getAbovePeriods(history, thr) {
   const periods = [];
-  let start = null;
+  let cur = null;
   for (const p of history) {
-    if (p.mx >= thr && start === null) {
-      start = p.fullTime;
-    } else if (p.mx < thr && start !== null) {
-      periods.push({ start, end: p.fullTime });
-      start = null;
+    if (p.mx >= thr) {
+      if (!cur) cur = { start: p.fullTime, end: p.fullTime, peak: p, n: 0 };
+      cur.n++;
+      cur.end = p.fullTime;
+      if (p.mx > cur.peak.mx) cur.peak = p;
+    } else if (cur) {
+      cur.end = p.fullTime;
+      periods.push(cur);
+      cur = null;
     }
   }
-  if (start !== null && history.length > 0)
-    periods.push({ start, end: history[history.length - 1].fullTime });
+  if (cur) periods.push(cur);
   return periods;
 }
 
@@ -412,24 +443,42 @@ function drawDayDiagram(canvas, history, explicitSize) {
     ctx.fillText(lbl, x, y);
   });
 
-  // Centre label: red crossing count + total duration
+
+  // Red dots (depends on countMode)
   const redPeriods = getAbovePeriods(history, THRESHOLD2);
+  const aboveRed   = history.filter(p => p.mx >= THRESHOLD2);
+  const dotPoints  = countMode === 'periods'
+    ? redPeriods.map(per => per.peak)   // one dot per period, at its highest reading
+    : aboveRed;                         // one dot per reading
+
+  const dotR = Math.max(1.2, size * 0.007);
+  ctx.fillStyle = 'rgba(220,0,80,0.9)';
+  for (const p of dotPoints) {
+    const a = timeToAngleDeg(p.fullTime.slice(11, 16));
+    const r = (p.mx / DB_MAX) * outer;
+    const [x, y] = polarToXY(cx, cy, r, a);
+    ctx.beginPath();
+    ctx.arc(x, y, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Centre label
   if (redPeriods.length > 0) {
+    const count     = dotPoints.length;
     const totalMins = periodsTotalMinutes(redPeriods);
-    const fsLarge = Math.max(9,  size * 0.10);
-    const fsSmall = Math.max(7,  size * 0.055);
+    const fsLarge = Math.max(9, size * 0.10);
+    const fsSmall = Math.max(7, size * 0.055);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    // Count
     ctx.font = `500 ${fsLarge}px IBM Plex Mono, monospace`;
     ctx.fillStyle = 'rgba(220,0,80,0.90)';
-    ctx.fillText(redPeriods.length + '×', cx, cy - fsSmall * 0.6);
-    // Duration
+    ctx.fillText(count + '×', cx, cy - fsSmall * 0.6);
     ctx.font = `300 ${fsSmall}px IBM Plex Mono, monospace`;
     ctx.fillStyle = 'rgba(220,0,80,0.65)';
     ctx.fillText(fmtMinutes(totalMins), cx, cy + fsLarge * 0.6);
   }
 }
+
 
 // ── Lightbox ───────────────────────────────────────────────
 function openLightbox(date, records) {
@@ -444,11 +493,14 @@ function openLightbox(date, records) {
   drawDayDiagram(lbCvs, records, size);
 
   lbDate.textContent = date;
-  const above1 = countCrossings(records, 'eq',  THRESHOLD1);
-  const above2 = countCrossings(records, 'max', THRESHOLD2);
+  const bluePer = countCrossings(records, 'eq', THRESHOLD1);
+  const bluePts = records.filter(p => p.eq >= THRESHOLD1).length;
+  const redPer = getAbovePeriods(records, THRESHOLD2).length;
+  const redPts = records.filter(p => p.mx >= THRESHOLD2).length;
+
   lbStat.innerHTML =
-    `<span class="stat-blue">≥${THRESHOLD1} dB (eq): ${above1}×</span>` +
-    `<span class="stat-red">≥${THRESHOLD2} dB (max): ${above2}×</span>`;
+    `<span class="stat-blue">≥${THRESHOLD1} dB (eq)<br> ${bluePts} metingen in ${bluePer} perioden</span>` +
+    `<span class="stat-red">≥${THRESHOLD2} dB (max)<br> ${redPts} metingen in ${redPer} perioden</span>`;
 
   lb.classList.add('open');
   document.addEventListener('keydown', onEsc);
