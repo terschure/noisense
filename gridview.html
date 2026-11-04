@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Geluidssensor — Overzicht</title>
@@ -219,6 +220,21 @@
     text-transform: uppercase;
     cursor: pointer;
   }
+  #lightbox-actions {
+  position: fixed;
+  bottom: 18px; right: 22px;
+  display: flex; gap: 16px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+  }
+  #lightbox-actions span { cursor: pointer; }
+  #lightbox-actions span:hover { color: var(--ink); }
+  #lightbox-date {
+  white-space: pre-line;
+  text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -258,6 +274,10 @@
 <!-- Lightbox -->
 <div id="lightbox" onclick="closeLightbox()">
   <span id="lightbox-close">sluiten ×</span>
+  <div id="lightbox-actions">
+    <span onclick="event.stopPropagation(); exportCurrent('png')">png ↓</span>
+    <span onclick="event.stopPropagation(); exportCurrent('pdf')">pdf ↓</span>
+  </div>
   <canvas id="lightbox-canvas"></canvas>
   <div id="lightbox-date"></div>
   <div id="lightbox-stats"></div>
@@ -304,14 +324,30 @@ function parseRecords(raw) {
     mx:       parseFloat(r.values.noise_LA_max) || 0,
     eq:       parseFloat(r.values.noise_LAeq)   || 0,
     mn:       parseFloat(r.values.noise_LA_min) || 0,
-    fullTime: r.timestamp
+    t:        Date.parse(r.timestamp.replace(' ', 'T') + 'Z'),
+    fullTime: utcToAmsterdam(r.timestamp)
   }));
+}
+
+// Day files are UTC → Amsterdam local time, "YYYY-MM-DD HH:MM:SS"
+const amsFmt = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Amsterdam',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hourCycle: 'h23'
+});
+function utcToAmsterdam(ts) {
+  return amsFmt.format(new Date(ts.replace(' ', 'T') + 'Z'));
 }
 
 // ── Geometry helpers ───────────────────────────────────────
 function timeToAngleDeg(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return ((h * 60 + m) / 1440) * 360 - 90;
+}
+function timeToAngleDegSec(fullTime) { //this one includes seconds
+  const [h, m, s] = fullTime.slice(11, 19).split(':').map(Number);
+  return ((h * 3600 + m * 60 + s) / 86400) * 360 - 90;
 }
 function polarToXY(cx, cy, r, angleDeg) {
   const rad = angleDeg * Math.PI / 180;
@@ -337,12 +373,14 @@ function getAbovePeriods(history, thr) {
   let cur = null;
   for (const p of history) {
     if (p.mx >= thr) {
-      if (!cur) cur = { start: p.fullTime, end: p.fullTime, peak: p, n: 0 };
+      if (!cur) cur = { start: p.fullTime, end: p.fullTime, t0: p.t, t1: p.t, peak: p, n: 0 };
       cur.n++;
       cur.end = p.fullTime;
+      cur.t1  = p.t;
       if (p.mx > cur.peak.mx) cur.peak = p;
     } else if (cur) {
-      cur.end = p.fullTime;
+      cur.end = p.fullTime;   // first reading back below the threshold closes the period
+      cur.t1  = p.t;
       periods.push(cur);
       cur = null;
     }
@@ -351,11 +389,33 @@ function getAbovePeriods(history, thr) {
   return periods;
 }
 
+// Arcs (in seconds of the day) for the periods above the threshold.
+// A period is split where the clock label jumps back (the 25-hour day in October).
+function getAboveArcs(history, thr) {
+  const sec = p => {
+    const [h, m, s] = p.fullTime.slice(11, 19).split(':').map(Number);
+    return h * 3600 + m * 60 + s;
+  };
+  const arcs = [];
+  let cur = null;
+  for (const p of history) {
+    const s = sec(p);
+    if (p.mx >= thr) {
+      if (cur && s < cur.end) { arcs.push(cur); cur = null; }   // clock went back
+      if (!cur) cur = { start: s, end: s };
+      else cur.end = s;
+    } else if (cur) {
+      if (s >= cur.end) cur.end = s;       // first reading below closes the arc
+      arcs.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) arcs.push(cur);
+  return arcs;
+}
+
 function periodsTotalMinutes(periods) {
-  return periods.reduce((sum, p) => {
-    const toMin = t => { const [h, m] = t.slice(11,16).split(':').map(Number); return h*60+m; };
-    return sum + Math.max(0, toMin(p.end) - toMin(p.start));
-  }, 0);
+  return periods.reduce((sum, p) => sum + Math.max(0, Math.round((p.t1 - p.t0) / 60000)), 0);
 }
 
 function fmtMinutes(mins) {
@@ -395,10 +455,10 @@ function drawDayDiagram(canvas, history, explicitSize) {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.strokeStyle = col;
-    ctx.lineWidth = Math.max(0.4, size * 0.003);
-    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = Math.max(0.4, size * 0.002);
+    //ctx.setLineDash([2, 4]);
     ctx.stroke();
-    ctx.setLineDash([]);
+    //ctx.setLineDash([]);
   });
 
   // Min–max bars
@@ -445,26 +505,45 @@ function drawDayDiagram(canvas, history, explicitSize) {
 
 
   // Red dots (depends on countMode)
-  const redPeriods = getAbovePeriods(history, THRESHOLD2);
-  const aboveRed   = history.filter(p => p.mx >= THRESHOLD2);
-  const dotPoints  = countMode === 'periods'
-    ? redPeriods.map(per => per.peak)   // one dot per period, at its highest reading
-    : aboveRed;                         // one dot per reading
+    const redPeriods = getAbovePeriods(history, THRESHOLD2);
 
-  const dotR = Math.max(1.2, size * 0.007);
-  ctx.fillStyle = 'rgba(220,0,80,0.9)';
-  for (const p of dotPoints) {
-    const a = timeToAngleDeg(p.fullTime.slice(11, 16));
-    const r = (p.mx / DB_MAX) * outer;
-    const [x, y] = polarToXY(cx, cy, r, a);
-    ctx.beginPath();
-    ctx.arc(x, y, dotR, 0, Math.PI * 2);
-    ctx.fill();
+  if (countMode === 'periods') {
+    // Period arcs, just outside the red threshold ring
+    const arcR     = (THRESHOLD2 / DB_MAX) * outer + Math.max(3, size * 0.015);
+    const minSweep = 0.6;                       // degrees, so single readings stay visible
+    ctx.save();
+    ctx.strokeStyle = 'rgba(220,0,80,0.9)';
+    ctx.lineWidth   = Math.max(1.5, size * 0.007);
+    ctx.lineCap     = 'butt';
+    for (const arc of getAboveArcs(history, THRESHOLD2)) {
+      const a1 = (arc.start / 86400) * 2 * Math.PI - Math.PI / 2;
+      const a2 = Math.max((arc.end / 86400) * 2 * Math.PI - Math.PI / 2,
+                          a1 + minSweep * Math.PI / 180);
+      ctx.beginPath();
+      ctx.arc(cx, cy, arcR, a1, a2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else {
+    // One dot per reading above the threshold
+    const dotR = Math.max(1.2, size * 0.007);
+    ctx.fillStyle = 'rgba(220,0,80,0.9)';
+    for (const p of history) {
+      if (p.mx < THRESHOLD2) continue;
+      const a = timeToAngleDeg(p.fullTime.slice(11, 16));
+      const r = (p.mx / DB_MAX) * outer;
+      const [x, y] = polarToXY(cx, cy, r, a);
+      ctx.beginPath();
+      ctx.arc(x, y, dotR, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // Centre label
   if (redPeriods.length > 0) {
-    const count     = dotPoints.length;
+    const count     = countMode === 'periods'
+      ? redPeriods.length
+      : history.filter(p => p.mx >= THRESHOLD2).length;
     const totalMins = periodsTotalMinutes(redPeriods);
     const fsLarge = Math.max(9, size * 0.10);
     const fsSmall = Math.max(7, size * 0.055);
@@ -481,7 +560,31 @@ function drawDayDiagram(canvas, history, explicitSize) {
 
 
 // ── Lightbox ───────────────────────────────────────────────
+
+function getStatBlocks(records) {
+  const bluePts = records.filter(p => p.eq >= THRESHOLD1).length;
+  const bluePer = countCrossings(records, 'eq', THRESHOLD1);
+  const redPts  = records.filter(p => p.mx >= THRESHOLD2).length;
+  const redPer  = getAbovePeriods(records, THRESHOLD2).length;
+  return [
+    { cls: 'stat-blue', color: 'rgb(100,150,255)', align: 'right',
+      lines: [`≥${THRESHOLD1} dB (eq)`, `${bluePts} metingen verdeeld over`, `${bluePer} aaneengesloten tijdsperioden`] },
+    { cls: 'stat-red',  color: 'rgb(220,0,80)',    align: 'left',
+      lines: [`≥${THRESHOLD2} dB (max)`, `${redPts} metingen verdeeld over`, `${redPer} aaneengesloten tijdsperioden`] }
+  ];
+}
+
+function getDateLines(date) {
+  const d = new Date(date + 'T00:00:00');
+  const weekday = d.toLocaleDateString('nl-NL', { weekday: 'short' });
+  return [
+    weekday + ' ' + date,
+    'Sensor ' + currentSensor
+  ];
+}
+
 function openLightbox(date, records) {
+  lightboxState = { date, records };
   const lb     = document.getElementById('lightbox');
   const lbCvs  = document.getElementById('lightbox-canvas');
   const lbDate = document.getElementById('lightbox-date');
@@ -492,15 +595,10 @@ function openLightbox(date, records) {
   lbCvs.style.height = size + 'px';
   drawDayDiagram(lbCvs, records, size);
 
-  lbDate.textContent = date;
-  const bluePer = countCrossings(records, 'eq', THRESHOLD1);
-  const bluePts = records.filter(p => p.eq >= THRESHOLD1).length;
-  const redPer = getAbovePeriods(records, THRESHOLD2).length;
-  const redPts = records.filter(p => p.mx >= THRESHOLD2).length;
-
-  lbStat.innerHTML =
-    `<span class="stat-blue">≥${THRESHOLD1} dB (eq)<br> ${bluePts} metingen in ${bluePer} perioden</span>` +
-    `<span class="stat-red">≥${THRESHOLD2} dB (max)<br> ${redPts} metingen in ${redPer} perioden</span>`;
+  lbDate.textContent = getDateLines(date).join('\n');
+  lbStat.innerHTML = getStatBlocks(records)
+    .map(b => `<span class="${b.cls}">${b.lines.join('<br>')}</span>`)
+    .join('');
 
   lb.classList.add('open');
   document.addEventListener('keydown', onEsc);
@@ -516,6 +614,7 @@ function onEsc(e) { if (e.key === 'Escape') closeLightbox(); }
 function renderGrid(results, sensorId) {
   const container = document.getElementById('grid-container');
   container.style.setProperty('--cols', numCols);
+  currentSensor = sensorId;
 
   // Newest first
   const sorted = [...results].sort((a, b) => b.date.localeCompare(a.date));
@@ -609,8 +708,30 @@ async function loadAll() {
     }
   }));
 
-  renderGrid(results, sensorId);
+  // Regroup by Amsterdam date (a UTC day file spans two local days)
+  const byDay = new Map();
+  const seen  = new Set();                       // drops readings that appear in two files
+  for (const { date, records } of results) {
+    if (!byDay.has(date)) byDay.set(date, []);   // keep empty/failed days visible
+    for (const r of records) {
+      if (seen.has(r.t)) continue;
+      seen.add(r.t);
+      const d = r.fullTime.slice(0, 10);
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(r);
+    }
+  }
+  const regrouped = [...byDay].map(([date, records]) => ({
+    date,
+    records: records.sort((a, b) => a.t - b.t)
+  }));
+
+  renderGrid(regrouped, sensorId);
 }
+
+// Auto-load on open
+loadAll();
+
 
 // ── Resize ─────────────────────────────────────────────────
 let resizeTimer;
@@ -623,8 +744,105 @@ window.addEventListener('resize', () => {
   }, 150);
 });
 
-// Auto-load on open
-loadAll();
+
+// ── Export functions ─────────────────────────────────────────────────
+
+let lightboxState = null;
+let currentSensor = '';
+
+// Offscreen render. transparent=true keeps the background transparent (PNG);
+// false paints white (PDF).
+// Centred text with letter-spacing (mirrors CSS letter-spacing: 0.1em)
+function drawSpaced(ctx, text, cx, y, spacing) {
+  const chars  = [...text];
+  const widths = chars.map(c => ctx.measureText(c).width);
+  const total  = widths.reduce((a, b) => a + b, 0) + spacing * (chars.length - 1);
+  let x = cx - total / 2;
+  ctx.textAlign = 'left';
+  chars.forEach((c, i) => { ctx.fillText(c, x, y); x += widths[i] + spacing; });
+}
+
+function renderExportCanvas(date, records, px = 3000, transparent = true) {
+  const dpr    = window.devicePixelRatio || 1;
+  const margin = Math.round(px * 0.06);
+
+  // Same proportions as the lightbox: date 12px, stats 14px, 14px gaps
+  const statFs = Math.round(px * 0.02);
+  const dateFs = Math.round(statFs * 12 / 14);
+  const lineH  = 1.5;
+  const gap    = statFs;
+
+  const dateLines = getDateLines(date);
+  const blocks    = getStatBlocks(records);
+  const statRows  = Math.max(...blocks.map(b => b.lines.length));
+
+  const dateH = dateLines.length * dateFs * lineH;
+  const statH = statRows * statFs * lineH;
+
+  const W = px + margin * 2;
+  const H = margin + px + gap + dateH + gap + statH + margin;
+  const midX = W / 2;
+
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const ctx = out.getContext('2d');
+  if (!transparent) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); }
+
+  // Diagram
+  const tmp = document.createElement('canvas');
+  drawDayDiagram(tmp, records, px / dpr);
+  ctx.drawImage(tmp, margin, margin, px, px);
+
+  // Date lines (same text as the lightbox, uppercase, letter-spacing 0.1em)
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#aaa';
+  ctx.font = `${dateFs}px IBM Plex Mono, monospace`;
+  let y = margin + px + gap;
+  dateLines.forEach((line, i) => {
+    drawSpaced(ctx, line.toUpperCase(), midX, y + (i + 0.5) * dateFs * lineH, dateFs * 0.1);
+  });
+
+  // Stat blocks: blue right-aligned left of the centre, red left-aligned right of it
+  y += dateH + gap;
+  const colGap = statFs * 1.7;
+  ctx.font = `${statFs}px IBM Plex Mono, monospace`;
+  for (const b of blocks) {
+    ctx.textAlign = b.align;
+    ctx.fillStyle = b.color;
+    const x = b.align === 'right' ? midX - colGap / 2 : midX + colGap / 2;
+    b.lines.forEach((text, i) => ctx.fillText(text, x, y + (i + 0.5) * statFs * lineH));
+  }
+
+  return out;
+}
+
+function downloadPNG(date, records) {
+  renderExportCanvas(date, records, 3000, true).toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sensor${currentSensor}_${date}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+
+function downloadPDF(date, records) {
+  const c = renderExportCanvas(date, records, 3000, false);
+  const { jsPDF } = window.jspdf;
+  const w = 210, h = w * c.height / c.width;
+  const pdf = new jsPDF({ orientation: h > w ? 'p' : 'l', unit: 'mm', format: [w, h] });
+  pdf.addImage(c.toDataURL('image/png'), 'PNG', 0, 0, w, h);
+  pdf.save(`sensor${currentSensor}_${date}.pdf`);
+}
+
+function exportCurrent(kind) {
+  if (!lightboxState) return;
+  const { date, records } = lightboxState;
+  kind === 'pdf' ? downloadPDF(date, records) : downloadPNG(date, records);
+}
+
+
+
 </script>
 </body>
 </html>

@@ -176,10 +176,16 @@ let font;
 const DB_MAX = 100;
 const threshold = 48;
 const threshold2 = 70;
+const PERIOD_OFFSET = 6;   // px outside the 70 dB ring
+const PERIOD_WEIGHT = 4;   // arc thickness in px
 
 //const POLL_INTERVAL_MS   = 5 * 60 * 1000; // 5 minutes
 let health = 100;
+const DRAIN_EQ  = 0.2;   // per reading with LAeq ≥ threshold (48 dB)
+const DRAIN_MAX = 0.5;   // extra per reading with LAmax ≥ threshold2 (70 dB)
+const RECOVER   = 0.2;   // per reading with LAeq below threshold
 let maxHealth = 100;
+let depletedAt = null;
 
 let sensorHistory = [];
 let visibleHistory = [];
@@ -236,6 +242,7 @@ async function loadData(mode) {
   isLoading = true;
   if (mode !== 'live') dataMode = mode;
   health = maxHealth;
+  depletedAt = null;
   invertTimer = 0;
   wasAboveThreshold = false;
 
@@ -270,7 +277,7 @@ async function loadData(mode) {
           const last = sensorHistory[sensorHistory.length - 1];
           latestDate = last.fullTime.slice(0, 10);
           playbackStartTime = millis();
-          dataStartTime = new Date(sensorHistory[0].fullTime).getTime();
+          dataStartTime = sensorHistory[0].t;
           playbackIndex = sensorHistory.length;
           dataMode = 'live'; // only after playbackIndex is set
         }
@@ -313,7 +320,8 @@ async function loadData(mode) {
         mx:       parseFloat(r.values.noise_LA_max) || 0,
         eq:       parseFloat(r.values.noise_LAeq)   || 0,
         mn:       parseFloat(r.values.noise_LA_min) || 0,
-        fullTime: r.timestamp
+        t:        utcToMs(r.timestamp),            // real time (UTC) in ms, for playback timing
+        fullTime: utcToAmsterdam(r.timestamp)      // Amsterdam time, for angles and labels
       }));
       if (sensorHistory.length) {
         const last = sensorHistory[sensorHistory.length - 1];
@@ -323,7 +331,7 @@ async function loadData(mode) {
         latestTime = last.fullTime;
         latestDate = last.fullTime.slice(0, 10);
         playbackStartTime = millis();
-        dataStartTime = new Date(sensorHistory[0].fullTime).getTime();
+        dataStartTime = sensorHistory[0].t;        // was: new Date(sensorHistory[0].fullTime).getTime()
       }
       playbackIndex = 0;
       isLoading = false;
@@ -335,6 +343,21 @@ function timeToAngle(hhmm) {
   // slice(11,16) gives "HH:MM" cleanly
   let [h, m] = hhmm.split(':').map(Number);
   return ((h * 60 + m) / 1440) * 360;
+}
+// Timestamps from Sensor.community and the day files are UTC.
+// → Amsterdam local time as "YYYY-MM-DD HH:MM:SS" (for the clock face and labels)
+const amsFmt = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Amsterdam',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hourCycle: 'h23'                     // avoids "24:00:00" at midnight
+});
+function utcToAmsterdam(ts) {
+  return amsFmt.format(new Date(ts.replace(' ', 'T') + 'Z'));
+}
+// → real time in ms (for playback timing, correct on the 25-hour day)
+function utcToMs(ts) {
+  return Date.parse(ts.replace(' ', 'T') + 'Z');
 }
 
 function setup() {
@@ -352,6 +375,8 @@ function setup() {
     playbackIndex = 0;
     invertTimer = 0;
     wasAboveThreshold = false;
+    health = maxHealth;      // ← new
+    depletedAt = null;       // ← new
   });
   
   //loadData();
@@ -375,9 +400,7 @@ function draw() {
     const realElapsedMs = millis() - playbackStartTime;
     const dataElapsedMs = realElapsedMs * int(speedSlider.value);
     const cutoff = dataStartTime + dataElapsedMs;
-    visibleHistory = sensorHistory.filter(p =>
-      new Date(p.fullTime).getTime() <= cutoff
-    );
+    visibleHistory = sensorHistory.filter(p => p.t <= cutoff);
   }
 
   //if (playbackIndex < sensorHistory.length) {
@@ -390,28 +413,27 @@ function draw() {
   const aboveThresholdMax = countAboveThreshold("max", threshold2, visibleHistory);
   
   drawData(cx, cy, inner, outer, visibleHistory);
+  drawAbovePeriods(cx, cy, inner, outer, visibleHistory);
   
   
   // invert colours when threshold is met for playback values // ADJUST FOR LATEST VALUES
-  if (!isLoading && visibleHistory.length > playbackIndex) {
-  const current = visibleHistory[visibleHistory.length - 1];
-  const isAboveMx = current.mx >= threshold2;
-  const isAboveEq = current.eq >= threshold;
-  const isBelowEq = current.eq <= threshold;
+    if (!isLoading && visibleHistory.length > playbackIndex) {
 
-    if (isAboveEq && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
-      if (health > 0) {
-        health-=1;
+    for (let i = playbackIndex; i < visibleHistory.length; i++) {
+      const p = visibleHistory[i];
+
+      if (p.eq >= threshold)  health -= DRAIN_EQ;
+      if (p.mx >= threshold2) {
+        invertTimer = INVERT_DURATION;
+        health -= DRAIN_MAX;
       }
-    }
-    if (isAboveMx && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
-    invertTimer = INVERT_DURATION;
-      if (health > 0) {
-        health-=2;
+      if (p.eq < threshold)   health += RECOVER;
+
+      health = constrain(health, 0, maxHealth);
+
+      if (health <= 0 && depletedAt === null) {
+        depletedAt = p.fullTime.slice(11, 16);
       }
-    }
-    if (isBelowEq && health < maxHealth && (dataMode === 'live' || visibleHistory.length < sensorHistory.length)) {
-        health++;
     }
 
     if (invertTimer > 0) {
@@ -439,6 +461,7 @@ function draw() {
     drawInfo(aboveThresholdEq, aboveThresholdMax);
     drawHeart();
     updateHealth(health, maxHealth);
+    drawDepleted();
     drawFinished(cx, cy, aboveThresholdMax);
 }
 
@@ -456,13 +479,16 @@ function processEntry(entry) {
 
   latestMax = mx; latestEq = eq; latestMin = mn;
 
+  const ts = utcToAmsterdam(entry.timestamp);
+
   let isNew = sensorHistory.length === 0 ||
-              entry.timestamp !== sensorHistory[sensorHistory.length - 1].fullTime;
+              ts !== sensorHistory[sensorHistory.length - 1].fullTime;
 
   if (isNew) {
-    sensorHistory.push({ mx, eq, mn, fullTime: entry.timestamp });
+    sensorHistory.push({ mx, eq, mn, t: utcToMs(entry.timestamp), fullTime: ts });
   }
   if (sensorHistory.length > 8640) sensorHistory.shift();
+
 }
 
 function drawGrid(cx, cy, inner, outer) {
@@ -583,6 +609,19 @@ function updateHealth(health, maxHealth) {
     map(health, 0, maxHealth, 0, 154 - sw), 11 - sw);
 }
 
+function drawDepleted() {
+  if (depletedAt === null) return; // removed health > 0 || so keeps the first hit
+  push();
+  noStroke();
+  fill(0);
+  textAlign(RIGHT, CENTER);
+  textSize(9);                                  // the bar is only 11px tall
+  textStyle(NORMAL);
+  // centre of the bar: x = width-160 + 154/2, y = height-28 + 11/2
+  text("depleted at " + depletedAt, width - 6 - 4, height - 28 + 5);
+  pop();
+}
+
 function drawInfo(aboveThresholdEq, aboveThresholdMax) {
   fill(0); noStroke();
   textAlign(LEFT);
@@ -632,8 +671,8 @@ function drawPlayhead(cx, cy, inner, outer, history) {
   const next = sensorHistory[history.length]; // the upcoming point
 
   // How far between last and next timestamp (0–1)
-  const lastT = new Date(last.fullTime).getTime();
-  const nextT = new Date(next.fullTime).getTime();
+  const lastT = last.t;
+  const nextT = next.t;
   const realElapsedMs = millis() - playbackStartTime;
   const dataElapsedMs = realElapsedMs * int(speedSlider.value);
   const nowT = dataStartTime + dataElapsedMs;
@@ -734,6 +773,57 @@ function drawFinished(cx, cy, aboveThresholdMax) {
   pop();
 }
 
+
+// _____ create arcs_______________
+
+// _____ create arcs_______________
+
+// Periods where LAmax ≥ thr, as arcs in seconds of the clock day.
+// An arc runs from the first reading above the threshold to the first reading
+// back below it. When the clock label jumps backwards (the repeated 02:xx hour
+// on 25 October, or midnight in a history that spans two days) the arc is cut
+// there instead of wrapping around the circle.
+function getAboveArcs(history, thr) {
+  const sec = p => {
+    const [h, m, s] = p.fullTime.slice(11, 19).split(':').map(Number);
+    return h * 3600 + m * 60 + s;
+  };
+  const arcs = [];
+  let cur = null;
+  for (const p of history) {
+    const s = sec(p);
+    if (cur && s < cur.end) { arcs.push(cur); cur = null; }   // clock went back: close the arc
+    if (p.mx >= thr) {
+      if (!cur) cur = { start: s, end: s };
+      else      cur.end = s;
+    } else if (cur) {
+      cur.end = s;                                            // first reading below closes it
+      arcs.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) arcs.push(cur);
+  return arcs;
+}
+
+function drawAbovePeriods(cx, cy, inner, outer, history) {
+  const r = map(threshold2, 0, DB_MAX, inner, outer) + PERIOD_OFFSET;
+
+  push();
+  translate(cx, cy);
+  rotate(-90);                       // same orientation as drawData: 00:00 at the top
+  noFill();
+  stroke(220, 0, 80);
+  strokeWeight(PERIOD_WEIGHT);
+  strokeCap(SQUARE);
+
+  for (const a of getAboveArcs(history, threshold2)) {
+    const a1 = (a.start / 86400) * 360;
+    const a2 = max((a.end / 86400) * 360, a1 + 0.5);   // single readings still get a visible sliver
+    arc(0, 0, r * 2, r * 2, a1, a2, OPEN);
+  }
+  pop();
+}
 
 </script>
 </body>
